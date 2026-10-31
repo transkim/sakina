@@ -27,7 +27,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: app/audio/duas
-          key: dua-audio-v1-${{ hashFiles('app/js/duas.js', 'tools/gen-dua-audio.py') }}
+          key: dua-audio-v2-${{ hashFiles('app/js/duas.js', 'tools/gen-dua-audio.py') }}
       - if: steps.cache.outputs.cache-hit != 'true'
         uses: actions/setup-python@v5
         with:
@@ -35,6 +35,7 @@ jobs:
       - name: Generate spoken Arabic clips with Piper
         if: steps.cache.outputs.cache-hit != 'true'
         run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg > /dev/null
           pip install --quiet piper-tts==1.2.0
           V=https://huggingface.co/rhasspy/piper-voices/resolve/main/ar/ar_JO/kareem/medium
           curl -sSfL -o /tmp/voice.onnx "$V/ar_JO-kareem-medium.onnx"
@@ -42,8 +43,11 @@ jobs:
           node -e "console.log(JSON.stringify(require('./app/js/duas.js')))" > /tmp/duas.json
           python tools/gen-dua-audio.py /tmp/duas.json /tmp/voice.onnx app/audio/duas
           for f in app/audio/duas/*.wav; do
-            ffmpeg -loglevel error -y -i "$f" -ac 1 -codec:a libmp3lame -b:a 48k "${f%.wav}.mp3" && rm "$f"
+            ffmpeg -loglevel error -y -i "$f" -ac 1 -codec:a libmp3lame -b:a 48k "${f%.wav}.mp3"
+            rm "$f"
           done
+          test -z "$(ls app/audio/duas/*.wav 2>/dev/null)"
+          test "$(ls app/audio/duas/*.mp3 | wc -l)" -ge 60
           ls -la app/audio/duas | head -5; du -sh app/audio/duas
       - uses: actions/upload-artifact@v4
         with:
