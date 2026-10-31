@@ -333,7 +333,7 @@
       highlight(false);
     };
 
-    return { RECITERS, lastRead, surahs: SURAHS, scrollsItself: ['surah'] };
+    return { RECITERS, lastRead, surahs: SURAHS, audioUrl: urlFor, backupUrl, reciterName: () => reciter().name, stopPlayer: () => { if (P.surah) stop(); } };
   }
 
   window.SakinaQuranUI = { install, RECITERS };

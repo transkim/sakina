@@ -213,3 +213,7 @@ body.has-player #toast { bottom: calc(150px + var(--safe-bottom)); }
 }
 .nav a span { white-space: nowrap; }
 @media (max-width: 400px) { .nav a { font-size: 11px; } .nav a svg { width: 22px; height: 22px; } }
+
+.listen { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+#audioNote:empty { display: none; }
+#audioNote { margin-top: 6px; }

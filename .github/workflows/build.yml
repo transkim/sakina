@@ -19,8 +19,39 @@ jobs:
       - run: npm ci
       - run: npm test
 
+  dua-audio:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - id: cache
+        uses: actions/cache@v4
+        with:
+          path: app/audio/duas
+          key: dua-audio-v1-${{ hashFiles('app/js/duas.js', 'tools/gen-dua-audio.py') }}
+      - if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Generate spoken Arabic clips with Piper
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          pip install --quiet piper-tts==1.2.0
+          V=https://huggingface.co/rhasspy/piper-voices/resolve/main/ar/ar_JO/kareem/medium
+          curl -sSfL -o /tmp/voice.onnx "$V/ar_JO-kareem-medium.onnx"
+          curl -sSfL -o /tmp/voice.onnx.json "$V/ar_JO-kareem-medium.onnx.json"
+          node -e "console.log(JSON.stringify(require('./app/js/duas.js')))" > /tmp/duas.json
+          python tools/gen-dua-audio.py /tmp/duas.json /tmp/voice.onnx app/audio/duas
+          for f in app/audio/duas/*.wav; do
+            ffmpeg -loglevel error -y -i "$f" -ac 1 -codec:a libmp3lame -b:a 48k "${f%.wav}.mp3" && rm "$f"
+          done
+          ls -la app/audio/duas | head -5; du -sh app/audio/duas
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dua-audio
+          path: app/audio/duas
+
   windows:
-    needs: test
+    needs: [test, dua-audio]
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v5
@@ -28,6 +59,10 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - uses: actions/download-artifact@v4
+        with:
+          name: dua-audio
+          path: app/audio/duas
       - run: npm ci
       - run: npx electron-builder --win nsis --x64 --publish never
       - uses: actions/upload-artifact@v4
@@ -36,7 +71,7 @@ jobs:
           path: dist/*.exe
 
   android:
-    needs: test
+    needs: [test, dua-audio]
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -52,6 +87,10 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
+      - uses: actions/download-artifact@v4
+        with:
+          name: dua-audio
+          path: app/audio/duas
       - name: Set up Android SDK
         run: |
           if [ -z "$ANDROID_HOME" ] || [ ! -d "$ANDROID_HOME" ]; then
