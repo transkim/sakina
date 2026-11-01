@@ -1,5 +1,7 @@
 # Sakina
 
+Developed by **Hajj Abdul Hakim** ([@transkim](https://github.com/transkim)).
+
 Duas, dhikr and prayer times for Windows and Android. Everything works offline except Quran recitation, which streams.
 
 - **Quran**: the full Quran (Tanzil Uthmani text) with English meaning (M. H. Shakir) and transliteration. Browse by surah or juz, jump to any ayah (e.g. `2:255`), search the English and transliteration, bookmarks, and "continue reading".

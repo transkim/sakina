@@ -1,10 +1,13 @@
 {
   "name": "sakina",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Sakina: duas, dhikr counter, prayer times and Qibla. Works offline.",
   "main": "src/main.js",
   "license": "MIT",
-  "author": "Hajj Abdul Hakim",
+  "author": {
+    "name": "Hajj Abdul Hakim",
+    "url": "https://github.com/transkim"
+  },
   "scripts": {
     "start": "electron .",
     "test": "node --test test/*.test.js",
@@ -17,14 +20,28 @@
   "build": {
     "appId": "app.sakina.desktop",
     "productName": "Sakina",
-    "files": ["src/**", "app/**", "package.json"],
-    "directories": { "output": "dist", "buildResources": "build" },
-    "win": { "target": ["nsis"], "icon": "build/icon.ico" },
+    "files": [
+      "src/**",
+      "app/**",
+      "package.json"
+    ],
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "build/icon.ico"
+    },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
-      "artifactName": "Sakina-Setup-${version}.exe"
-    }
+      "artifactName": "Sakina-Setup-${version}.exe",
+      "shortcutName": "Sakina"
+    },
+    "copyright": "Copyright © 2026 Hajj Abdul Hakim"
   }
 }
