@@ -3,4 +3,3 @@ dist/
 mobile/www/
 *.log
 .DS_Store
-app/audio/

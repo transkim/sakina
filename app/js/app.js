@@ -239,9 +239,13 @@
       ${list.length ? `<div class="list">${list.map(item).join('')}</div>` : '<div class="empty">Tap the star on any dua to keep it here.</div>'}`;
   };
 
+  // Human recordings shipped in app/audio/duas (see manifest.js there)
+  const recorded = new Set(window.SakinaDuaAudio || []);
+
   views.dua = (params, id) => {
     const d = duaById[id];
     if (!d) return go('#/duas');
+    const hasClip = recorded.has(d.id);
     const siblings = duas.filter((x) => x.cat === d.cat);
     const i = siblings.indexOf(d);
     const prev = siblings[i - 1], next = siblings[i + 1];
@@ -258,8 +262,8 @@
         ${d.note ? `<div class="note">${esc(d.note)}</div>` : ''}
         <div class="src">Source: ${esc(d.src)}</div>
         <div class="listen">
-          <button class="btn primary" id="say" aria-label="Listen to this dua">▶ Listen</button>
-          ${d.repeat > 1 ? `<button class="btn" id="loop" aria-pressed="false">🔁 Play ${d.repeat} times</button>` : ''}
+          ${hasClip ? `<button class="btn primary" id="say" aria-label="Listen to this dua">▶ Listen</button>` : ''}
+          ${hasClip && d.repeat > 1 ? `<button class="btn" id="loop" aria-pressed="false">🔁 Play ${d.repeat} times</button>` : ''}
           ${d.quran ? `<button class="btn" id="recite">🎙 Qur'an recitation</button>` : ''}
         </div>
         <div class="muted small" id="audioNote">${d.quran ? `Recitation: ${esc(Q.reciterName())}, ${d.wholeVerse ? '' : 'full verse '}${d.quran.map(([s, a]) => s + ':' + a).join(', ')}. Needs internet.` : ''}</div>
@@ -309,12 +313,12 @@
     let looping = false, plays = 0, queue = [], backupTried = false;
     const idle = () => {
       mode = null;
-      say.textContent = '▶ Listen';
+      if (say) say.textContent = '▶ Listen';
       if (recite) recite.textContent = "🎙 Qur'an recitation";
     };
     const stopAudio = () => { audio.pause(); audio.removeAttribute('src'); idle(); };
     const playClip = () => { audio.src = `audio/duas/${d.id}.mp3`; audio.play().catch(() => {}); };
-    say.onclick = () => {
+    if (say) say.onclick = () => {
       if (mode === 'say') return stopAudio();
       Q.stopPlayer(); stopAudio();
       mode = 'say'; plays = 0; say.textContent = '❚❚ Stop';
@@ -379,7 +383,7 @@
         <h1>Tasbih</h1>
         <div class="chips">${dhikr.map((x) => `<button class="chip ${x.id === z.id ? 'on' : ''}" data-id="${x.id}">${esc(x.tr)}</button>`).join('')}</div>
         <div class="tasbih">
-          <div class="dhikr-ar">${esc(z.ar)} <button class="icon-btn on" id="hear" aria-label="Listen" style="font-size:20px;vertical-align:middle">🔊</button></div>
+          <div class="dhikr-ar">${esc(z.ar)}${recorded.has('dhikr-' + z.id) ? ' <button class="icon-btn on" id="hear" aria-label="Listen" style="font-size:20px;vertical-align:middle">🔊</button>' : ''}</div>
           <div class="muted" style="text-align:center;margin-top:-8px">${esc(z.en)}</div>
           <button class="ring" id="tap" aria-label="Count">
             <svg viewBox="0 0 300 300"><circle class="track" cx="150" cy="150" r="140"/><circle class="prog" id="prog" cx="150" cy="150" r="140" stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - inRound / target)}"/></svg>
@@ -395,7 +399,8 @@
         </div>`;
       $view.querySelectorAll('.chip').forEach((b) => b.onclick = () => { state.id = b.dataset.id; state.count = 0; save(); draw(); });
       document.getElementById('reset').onclick = () => { state.count = 0; save(); draw(); };
-      document.getElementById('hear').onclick = () => { const a = new Audio(`audio/duas/dhikr-${z.id}.mp3`); a.onerror = () => toast('Audio is not included in this build.'); a.play().catch(() => {}); };
+      const hear = document.getElementById('hear');
+      if (hear) hear.onclick = () => { const a = new Audio(`audio/duas/dhikr-${z.id}.mp3`); a.onerror = () => toast('Audio is not included in this build.'); a.play().catch(() => {}); };
       document.getElementById('target').onchange = (e) => { settings.tasbihTarget = Number(e.target.value); saveSettings(); draw(); };
       document.getElementById('tap').onclick = () => {
         state.count++; state.today++; save();
@@ -537,7 +542,7 @@
 
       <h2>About</h2>
       <div class="card small">
-        <p style="margin-top:0"><b>Sakina</b> 0.3.0 · works offline, except Quran recitation.</p>
+        <p style="margin-top:0"><b>Sakina</b> 0.3.1 · works offline, except Quran recitation.</p>
         <p>Arabic texts are from the Qur'an and the hadith collections named on each dua. Transliterations and English meanings are written for Sakina and are approximate; please check with a teacher you trust, and report any mistake.</p>
         <p>Quran: Tanzil Uthmani text (tanzil.net, CC BY 3.0, used unchanged), English by M. H. Shakir and transliteration via tanzil.net. Recitations stream from everyayah.com. Quran font: Amiri Quran (SIL OFL).</p>
         <p>Prayer times are calculated on your device and may differ by a minute or two from your local mosque. Arabic font: Amiri (SIL Open Font License).</p>
