@@ -4,7 +4,7 @@ Duas, dhikr and prayer times for Windows and Android. Everything works offline e
 
 - **Quran**: the full Quran (Tanzil Uthmani text) with English meaning (M. H. Shakir) and transliteration. Browse by surah or juz, jump to any ayah (e.g. `2:255`), search the English and transliteration, bookmarks, and "continue reading".
 - **Recitation**: 10 reciters streamed ayah by ayah from everyayah.com, with the playing ayah highlighted, play from any ayah, repeat an ayah or a whole surah, and continue into the next surah.
-- **Dua audio**: duas from the Qur'an play a real recitation of their verses. Recorded audio for other duas can be added in `app/audio/duas` (see `manifest.js`).
+- **Dua audio**: 22 morning duas have audio by Sheikh Mishary Rashid Alafasy (used with permission), cut from his morning adhkar recording. Duas from the Qur'an can also play a verse recitation. On any dua you can add your own audio file (with start/end) or record your voice; it stays on your device.
 - **Duas**: 53 duas in 12 categories (morning and evening, sleep, prayer, Qur'anic duas, forgiveness, hardship, food and fasting, home and travel, illness, family, guidance, everyday). Arabic with vowels, transliteration, English meaning and source. Search, favourites, copy and share, and a tap counter for duas recited several times.
 - **Tasbih**: digital counter for 8 common adhkar, with targets (33, 99, 100…), rounds, haptic feedback on Android and a daily total. On Windows, Space or Enter counts.
 - **Prayer times**: calculated on the device for any location (GPS, a list of 90 cities, or coordinates), 14 calculation methods, standard or Hanafi Asr, Hijri date (Umm al-Qura) with ±2 day adjustment.

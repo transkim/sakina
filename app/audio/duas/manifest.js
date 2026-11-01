@@ -4,4 +4,5 @@
  * (or dhikr-<id>.mp3 for tasbih phrases) and add the id to this list.
  * Duas without a recording show no Listen button.
  */
-window.SakinaDuaAudio = [];
+// Recordings: Sheikh Mishary Rashid Alafasy, morning adhkar (used with permission).
+window.SakinaDuaAudio = ['d3', 'dhikr-tasbihhamd', 'f1', 'f2', 'g2', 'm1', 'm2', 'm3', 'm4', 'm6', 'ma', 'mb', 'mc', 'mf', 'mg', 'mh', 'mk', 'mn', 'mq', 'ms', 'mt', 'mu', 'mw'];
