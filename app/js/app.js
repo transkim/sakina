@@ -245,7 +245,6 @@
   views.dua = (params, id) => {
     const d = duaById[id];
     if (!d) return go('#/duas');
-    const hasClip = recorded.has(d.id);
     const siblings = duas.filter((x) => x.cat === d.cat);
     const i = siblings.indexOf(d);
     const prev = siblings[i - 1], next = siblings[i + 1];
@@ -262,11 +261,12 @@
         ${d.note ? `<div class="note">${esc(d.note)}</div>` : ''}
         <div class="src">Source: ${esc(d.src)}</div>
         <div class="listen">
-          ${hasClip ? `<button class="btn primary" id="say" aria-label="Listen to this dua">▶ Listen</button>` : ''}
-          ${hasClip && d.repeat > 1 ? `<button class="btn" id="loop" aria-pressed="false">🔁 Play ${d.repeat} times</button>` : ''}
-          ${d.quran ? `<button class="btn" id="recite">🎙 Qur'an recitation</button>` : ''}
+          <button class="btn primary" id="say" aria-label="Listen to this dua" hidden>▶ Listen</button>
+          ${d.repeat > 1 ? `<button class="btn" id="loop" aria-pressed="false" hidden>🔁 Play ${d.repeat} times</button>` : ''}
+          ${d.quran ? `<button class="btn" id="recite">📖 Qur'an recitation</button>` : ''}
         </div>
         <div class="muted small" id="audioNote">${d.quran ? `Recitation: ${esc(Q.reciterName())}, ${d.wholeVerse ? '' : 'full verse '}${d.quran.map(([s, a]) => s + ':' + a).join(', ')}. Needs internet.` : ''}</div>
+        <details class="myaudio" id="myaudioBox"><summary>🎧 Your audio for this dua</summary><div id="myaudio"></div></details>
         ${d.repeat > 1 ? `<div class="counter"><button class="btn primary" id="cnt">Tap to count · 0 / ${d.repeat}</button><button class="btn" id="cntReset">Reset</button></div>` : ''}
         <div class="actions">
           <button class="btn ${favs.has(d.id) ? 'fav-on' : ''}" id="fav">${favs.has(d.id) ? '★ Saved' : '☆ Favourite'}</button>
@@ -304,22 +304,41 @@
       document.getElementById('cntReset').onclick = () => { count = 0; cnt.textContent = `Tap to count · 0 / ${d.repeat}`; };
     }
 
-    // ----- audio: spoken clip (bundled) and Qur'an recitation (streamed) -----
+    // ----- audio: your own clip (on this device), a bundled recording, or Qur'an recitation -----
     const audio = new Audio();
     const say = document.getElementById('say');
     const recite = document.getElementById('recite');
     const loopBtn = document.getElementById('loop');
     let mode = null; // 'say' | 'recite'
     let looping = false, plays = 0, queue = [], backupTried = false;
+    let source = null; // { url, start, end }
+    let recorder = null, stream = null, alive = true;
+
     const idle = () => {
       mode = null;
-      if (say) say.textContent = '▶ Listen';
-      if (recite) recite.textContent = "🎙 Qur'an recitation";
+      say.textContent = '▶ Listen';
+      if (recite) recite.textContent = "📖 Qur'an recitation";
     };
     const stopAudio = () => { audio.pause(); audio.removeAttribute('src'); idle(); };
-    const playClip = () => { audio.src = `audio/duas/${d.id}.mp3`; audio.play().catch(() => {}); };
-    if (say) say.onclick = () => {
+    const playClip = () => {
+      if (audio.getAttribute('src') !== source.url) audio.src = source.url;
+      const go = () => { audio.currentTime = source.start || 0; audio.play().catch(() => {}); };
+      if (audio.readyState >= 1) go(); else audio.addEventListener('loadedmetadata', go, { once: true });
+    };
+    const clipEnded = () => {
+      plays++;
+      if (looping) bump();
+      if (looping && plays < d.repeat) return playClip();
+      audio.pause();
+      idle();
+    };
+    // stop at the clip's end point when it is a section of a longer file
+    audio.addEventListener('timeupdate', () => {
+      if (mode === 'say' && source && source.end != null && audio.currentTime >= source.end) clipEnded();
+    });
+    say.onclick = () => {
       if (mode === 'say') return stopAudio();
+      if (!source) return;
       Q.stopPlayer(); stopAudio();
       mode = 'say'; plays = 0; say.textContent = '❚❚ Stop';
       playClip();
@@ -345,12 +364,7 @@
       playNextVerse();
     };
     audio.addEventListener('ended', () => {
-      if (mode === 'say') {
-        plays++;
-        if (looping) bump();
-        if (looping && plays < d.repeat) return playClip();
-        return idle();
-      }
+      if (mode === 'say') return clipEnded();
       if (mode === 'recite') return queue.length ? playNextVerse() : idle();
     });
     audio.addEventListener('error', () => {
@@ -361,11 +375,148 @@
         if (b) { backupTried = true; audio.src = b; audio.play().catch(() => {}); return; }
         toast('Could not load the recitation. Check your internet connection.');
       } else {
-        toast('Audio for this dua is not included in this build.');
+        toast('This audio could not be played.');
       }
       idle();
     });
-    cleanup = () => stopAudio();
+
+    // ----- your audio: choose a file, set start/end, or record -----
+    const box = document.getElementById('myaudio');
+    const fmt = MyAudio.fmt;
+
+    async function refreshSource() {
+      const c = await MyAudio.getClip(d.id).catch(() => null);
+      if (c) {
+        const url = await MyAudio.fileUrl(c.file);
+        source = url ? { url, start: c.start || 0, end: c.end, mine: c } : null;
+      } else {
+        source = recorded.has(d.id) ? { url: `audio/duas/${d.id}.mp3`, start: 0, end: null } : null;
+      }
+      say.hidden = !source;
+      if (loopBtn) loopBtn.hidden = !source;
+    }
+
+    async function renderMine() {
+      if (!alive) return;
+      const c = source && source.mine;
+      if (c) {
+        const f = await MyAudio.getFile(c.file);
+        box.innerHTML = `
+          <p class="small" style="margin:8px 0">Playing <b>${esc(f ? f.name : 'your audio')}</b>${c.start || c.end != null ? `, from ${fmt(c.start || 0)} to ${c.end != null ? fmt(c.end) : 'the end'}` : ''}. Saved on this device only.</p>
+          <div class="actions"><button class="btn" data-x="edit">✂ Set start and end</button><button class="btn" data-x="pick">Replace</button><button class="btn" data-x="remove">Remove</button></div>`;
+      } else {
+        const files = await MyAudio.files().catch(() => []);
+        box.innerHTML = `
+          <p class="small muted" style="margin:8px 0">Add a recording from your device or record your own voice. It stays on this device and plays from the Listen button.</p>
+          <div class="actions">
+            <button class="btn" data-x="file">📁 Choose audio file</button>
+            <button class="btn" data-x="rec">🎙 Record my voice</button>
+          </div>
+          ${files.length ? `<div class="field"><label for="reuse">Or use a file you added before</label><select id="reuse"><option value="">Choose…</option>${files.map((f) => `<option value="${f.id}">${esc(f.name)}</option>`).join('')}</select></div>` : ''}`;
+        const reuse = document.getElementById('reuse');
+        if (reuse) reuse.onchange = () => reuse.value && openTrim(reuse.value);
+      }
+    }
+
+    async function openTrim(fileId) {
+      const c = await MyAudio.getClip(d.id).catch(() => null);
+      const start = c && c.file === fileId ? c.start || 0 : 0;
+      const end = c && c.file === fileId ? c.end : null;
+      const url = await MyAudio.fileUrl(fileId);
+      stopAudio();
+      box.innerHTML = `
+        <p class="small muted" style="margin:8px 0">Play the file and tap “Set” when this dua starts and when it ends. Leave the end empty to play to the end of the file.</p>
+        <audio id="trimA" controls preload="metadata" src="${url}" style="width:100%"></audio>
+        <div class="field"><label>Start</label><span class="trim"><input id="tStart" type="text" inputmode="decimal" value="${fmt(start)}" placeholder="0:00"><button class="btn" data-x="setStart">Set</button></span></div>
+        <div class="field"><label>End</label><span class="trim"><input id="tEnd" type="text" inputmode="decimal" value="${end != null ? fmt(end) : ''}" placeholder="end"><button class="btn" data-x="setEnd">Set</button></span></div>
+        <div class="actions"><button class="btn" data-x="preview">▶ Preview</button><button class="btn primary" data-x="save" data-file="${fileId}">Save</button><button class="btn" data-x="cancel">Cancel</button></div>`;
+    }
+
+    async function saveFrom(fileId) {
+      const st = MyAudio.parse(document.getElementById('tStart').value) || 0;
+      const en = MyAudio.parse(document.getElementById('tEnd').value);
+      if (isNaN(st) || (en != null && (isNaN(en) || en <= st))) return toast('Check the times, e.g. 1:05 and 1:32.');
+      await MyAudio.setClip(d.id, fileId, st, en);
+      await refreshSource(); renderMine();
+      toast('Saved. Tap Listen to hear it.');
+    }
+
+    async function startRecording() {
+      if (!navigator.mediaDevices || !window.MediaRecorder) return toast('Recording is not supported on this device.');
+      try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); } catch (_) { return toast('Microphone access was not allowed.'); }
+      stopAudio();
+      const chunks = [];
+      recorder = new MediaRecorder(stream);
+      recorder.ondataavailable = (e) => e.data.size && chunks.push(e.data);
+      recorder.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop());
+        stream = null;
+        if (!alive || !chunks.length) return;
+        const blob = new Blob(chunks, { type: recorder.mimeType || 'audio/webm' });
+        const id = await MyAudio.addFile(blob, `My recording: ${d.title}`);
+        await MyAudio.setClip(d.id, id, 0, null);
+        await refreshSource(); renderMine();
+        toast('Recording saved');
+      };
+      recorder.start();
+      const t0 = Date.now();
+      box.innerHTML = `<div class="actions" style="align-items:center"><span class="rec-dot"></span><span id="recT">0:00</span><button class="btn primary" data-x="stopRec">■ Stop and save</button></div>`;
+      const iv = setInterval(() => {
+        const el = document.getElementById('recT');
+        if (!el || !recorder || recorder.state !== 'recording') return clearInterval(iv);
+        el.textContent = fmt((Date.now() - t0) / 1000);
+      }, 250);
+    }
+
+    const picker = document.createElement('input');
+    picker.type = 'file'; picker.accept = 'audio/*'; picker.hidden = true;
+    box.after(picker);
+    picker.onchange = async () => {
+      const f = picker.files && picker.files[0];
+      picker.value = '';
+      if (!f) return;
+      try {
+        const id = await MyAudio.addFile(f, f.name);
+        openTrim(id);
+      } catch (_) { toast('Could not save that file on this device.'); }
+    };
+
+    box.addEventListener('click', async (e) => {
+      const b = e.target.closest('button[data-x]');
+      if (!b) return;
+      const x = b.dataset.x;
+      const trimA = document.getElementById('trimA');
+      if (x === 'file' || x === 'pick') picker.click();
+      else if (x === 'rec') startRecording();
+      else if (x === 'stopRec') { if (recorder && recorder.state === 'recording') recorder.stop(); }
+      else if (x === 'edit') openTrim(source.mine.file);
+      else if (x === 'remove') { stopAudio(); await MyAudio.removeClip(d.id); await refreshSource(); renderMine(); toast('Removed'); }
+      else if (x === 'setStart' && trimA) document.getElementById('tStart').value = fmt(trimA.currentTime);
+      else if (x === 'setEnd' && trimA) document.getElementById('tEnd').value = fmt(trimA.currentTime);
+      else if (x === 'preview' && trimA) {
+        const st = MyAudio.parse(document.getElementById('tStart').value) || 0;
+        const en = MyAudio.parse(document.getElementById('tEnd').value);
+        trimA.currentTime = st; trimA.play().catch(() => {});
+        if (en != null && !isNaN(en)) {
+          const stopAt = () => { if (trimA.currentTime >= en) { trimA.pause(); trimA.removeEventListener('timeupdate', stopAt); } };
+          trimA.addEventListener('timeupdate', stopAt);
+        }
+      } else if (x === 'save') saveFrom(b.dataset.file);
+      else if (x === 'cancel') renderMine();
+    });
+
+    refreshSource().then(() => {
+      if (source && source.mine) document.getElementById('myaudioBox').open = false;
+      renderMine();
+    });
+
+    cleanup = () => {
+      alive = false;
+      stopAudio();
+      if (recorder && recorder.state === 'recording') recorder.stop();
+      if (stream) stream.getTracks().forEach((t) => t.stop());
+      picker.remove();
+    };
   };
 
   views.tasbih = () => {
