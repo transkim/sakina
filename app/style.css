@@ -99,6 +99,7 @@ h2 { font-size: 18px; margin: 24px 0 10px; }
 .list { display: flex; flex-direction: column; gap: 8px; }
 .item { display: flex; align-items: center; gap: 12px; padding: 14px 16px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; text-decoration: none; color: var(--text); }
 .item:hover { border-color: var(--primary); }
+.item.now { border-color: var(--primary); box-shadow: 0 0 0 2px var(--primary) inset; }
 .item .body { flex: 1; min-width: 0; }
 .item .t { font-weight: 600; }
 .item .ar-preview { font-family: 'Amiri', serif; direction: rtl; color: var(--muted); font-size: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

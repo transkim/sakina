@@ -148,6 +148,9 @@
           <div style="margin-top:10px"><a class="btn" href="#/settings" style="color:inherit;background:rgba(255,255,255,.15);border-color:transparent">Choose location</a></div>`}
       </div>
 
+      ${(() => { const h = today.getHours(); const c = catById[h >= 3 && h < 12 ? 'morning' : 'evening']; return `<a class="card" href="#/cat/${c.id}" style="display:flex;align-items:center;gap:12px;text-decoration:none;color:inherit">
+        <span style="font-size:26px">${c.icon}</span><div style="flex:1"><div class="muted small">Time for</div><div style="font-weight:600">${esc(c.name)}</div></div><span class="muted">›</span></a>`; })()}
+
       ${(() => { const lr = Q.lastRead(); return lr ? `<a class="card" href="#/surah/${lr.s}?a=${lr.a}" style="display:flex;align-items:center;gap:12px;text-decoration:none;color:inherit">
         <span style="font-size:26px">📖</span><div style="flex:1"><div class="muted small">Continue reading</div><div style="font-weight:600">${esc(Q.surahs[lr.s - 1].tr)} · ayah ${lr.a}</div></div><span class="muted">›</span></a>` : ''; })()}
 
@@ -228,7 +231,53 @@
     $view.innerHTML = `
       <a class="back" href="#/duas">‹ Duas</a>
       <h1>${c.icon} ${esc(c.name)}</h1>
+      <div class="actions" id="playAllBar" hidden><button class="btn primary" id="playAll">▶ Play all</button><label class="small muted" style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="playRep" ${settings.playAllRepeat !== false ? 'checked' : ''}> Repeat each the set number of times</label></div>
+      <div class="muted small" id="playNow"></div>
       <div class="list">${list.map(item).join('')}</div>`;
+    // ----- play every dua in this category that has audio, one after another -----
+    let alive = true, audio = null, playing = false;
+    const sourceFor = async (d) => {
+      const c2 = await MyAudio.getClip(d.id).catch(() => null);
+      if (c2) { const url = await MyAudio.fileUrl(c2.file); if (url) return { url, start: c2.start || 0, end: c2.end }; }
+      const aid = d.audio || d.id;
+      return recorded.has(aid) ? { url: `audio/duas/${aid}.mp3`, start: 0, end: null } : null;
+    };
+    const stop = () => {
+      playing = false;
+      if (audio) { audio.pause(); audio.src = ''; audio = null; }
+      const b = document.getElementById('playAll'); if (b) b.textContent = '▶ Play all';
+      const n = document.getElementById('playNow'); if (n) n.textContent = '';
+      $view.querySelectorAll('.item.now').forEach((x) => x.classList.remove('now'));
+    };
+    const playOne = (src, times) => new Promise((resolve) => {
+      let n = 0;
+      audio = new Audio(src.url);
+      const again = () => { if (!playing) return resolve(); audio.currentTime = src.start || 0; audio.play().catch(() => resolve()); };
+      audio.onloadedmetadata = again;
+      audio.ontimeupdate = () => { if (src.end != null && audio.currentTime >= src.end) audio.onended(); };
+      audio.onended = () => { if (++n < times && playing) again(); else { audio.ontimeupdate = null; resolve(); } };
+      audio.onerror = () => resolve();
+    });
+    (async () => {
+      const items = [];
+      for (const d of list) { const src = await sourceFor(d); if (src) items.push({ d, src }); }
+      if (!alive || !items.length) return;
+      const bar = document.getElementById('playAllBar');
+      bar.hidden = false;
+      document.getElementById('playRep').onchange = (e) => { settings.playAllRepeat = e.target.checked; saveSettings(); };
+      document.getElementById('playAll').onclick = async (e) => {
+        if (playing) return stop();
+        playing = true; e.currentTarget.textContent = '■ Stop';
+        for (const { d, src } of items) {
+          if (!playing || !alive) break;
+          document.getElementById('playNow').textContent = `Playing: ${d.title}`;
+          $view.querySelectorAll('.item').forEach((x) => x.classList.toggle('now', x.getAttribute('href') === '#/dua/' + d.id));
+          await playOne(src, settings.playAllRepeat !== false ? d.repeat : 1);
+        }
+        stop();
+      };
+    })();
+    cleanup = () => { alive = false; stop(); };
   };
 
   views.fav = () => {
@@ -390,7 +439,8 @@
         const url = await MyAudio.fileUrl(c.file);
         source = url ? { url, start: c.start || 0, end: c.end, mine: c } : null;
       } else {
-        source = recorded.has(d.id) ? { url: `audio/duas/${d.id}.mp3`, start: 0, end: null } : null;
+        const aid = d.audio || d.id;
+        source = recorded.has(aid) ? { url: `audio/duas/${aid}.mp3`, start: 0, end: null } : null;
       }
       say.hidden = !source;
       if (loopBtn) loopBtn.hidden = !source;
@@ -691,9 +741,17 @@
         <div class="field"><label for="sen">Show English meaning</label><input type="checkbox" class="switch" id="sen" ${settings.showEn ? 'checked' : ''}></div>
       </div>
 
+      <h2>Audio pack</h2>
+      <div class="card">
+        <p class="small muted" style="margin-top:0">Load a set of dua recordings at once. Each file is matched to a dua by its name, for example <code>m1.mp3</code> or <code>m1 Ayat al-Kursi.mp3</code>. A pack can also include <code>pack.json</code> that maps file names to duas. The files stay on this device and are never uploaded.</p>
+        <div class="actions"><button class="btn primary" id="packBtn">📦 Import audio pack</button><button class="btn" id="packClear">Remove all my audio</button></div>
+        <input type="file" id="packIn" accept="audio/*,.mp3,.m4a,.ogg,.opus,.aac,.wav,.json" multiple hidden>
+        <div class="muted small" id="packInfo"></div>
+      </div>
+
       <h2>About</h2>
       <div class="card small">
-        <p style="margin-top:0"><b>Sakina</b> 0.4.1 · works offline, except Quran recitation.</p>
+        <p style="margin-top:0"><b>Sakina</b> 0.5.0 · works offline, except Quran recitation.</p>
         <p>Developed by <b>Hajj Abdul Hakim</b>.</p>
         <p>Arabic texts are from the Qur'an and the hadith collections named on each dua. Transliterations and English meanings are written for Sakina and are approximate; please check with a teacher you trust, and report any mistake.</p>
         <p>Quran: Tanzil Uthmani text (tanzil.net, CC BY 3.0, used unchanged), English by M. H. Shakir and transliteration via tanzil.net. Recitations stream from everyayah.com. Quran font: Amiri Quran (SIL OFL).</p>
@@ -736,7 +794,70 @@
     $('ars').oninput = (e) => { settings.arSize = Number(e.target.value); saveSettings(); applyTheme(); };
     $('str').onchange = (e) => { settings.showTr = e.target.checked; saveSettings(); };
     $('sen').onchange = (e) => { settings.showEn = e.target.checked; saveSettings(); };
+
+    // ----- audio pack import -----
+    const packInfo = $('packInfo');
+    const showPack = async () => {
+      const cl = await MyAudio.clips().catch(() => []);
+      packInfo.textContent = cl.length ? `${cl.length} dua${cl.length === 1 ? ' has' : 's have'} your own audio.` : '';
+    };
+    showPack();
+    $('packBtn').onclick = () => $('packIn').click();
+    $('packIn').onchange = async (e) => {
+      const files = [...e.target.files];
+      e.target.value = '';
+      if (!files.length) return;
+      packInfo.textContent = 'Importing…';
+      try {
+        const r = await importPack(files);
+        packInfo.textContent = `Imported ${r.done} recording${r.done === 1 ? '' : 's'}${r.skipped.length ? `. Not matched: ${r.skipped.slice(0, 8).join(', ')}${r.skipped.length > 8 ? '…' : ''}` : ''}.`;
+        toast(`Audio added to ${r.done} dua${r.done === 1 ? '' : 's'}`);
+      } catch (err) {
+        packInfo.textContent = 'Import failed: ' + (err && err.message || err);
+      }
+    };
+    $('packClear').onclick = async () => {
+      const cl = await MyAudio.clips().catch(() => []);
+      if (!cl.length) return toast('No audio of your own yet');
+      if (!confirm(`Remove your audio from ${cl.length} duas? Recordings that came with Sakina stay.`)) return;
+      for (const c of cl) await MyAudio.removeClip(c.dua);
+      toast('Removed'); showPack();
+    };
   };
+
+  // Match pack files to duas: pack.json { "file name": "duaId" | { dua, start, end } | [..] },
+  // otherwise a file name that starts with a dua id ("m1.mp3", "m1 - Ayat al-Kursi.mp3", "dhikr-subhanallah.mp3").
+  async function importPack(files) {
+    let map = {};
+    const manifest = files.find((f) => /(^|\/)pack\.json$/i.test(f.name));
+    if (manifest) map = JSON.parse(await manifest.text());
+    const audio = files.filter((f) => f !== manifest);
+    const known = new Set(duas.map((d) => d.id));
+    let done = 0; const skipped = [];
+    for (const f of audio) {
+      let targets = map[f.name];
+      if (targets == null) {
+        const m = f.name.replace(/\.[^.]+$/, '').match(/^([a-z0-9]+)(?=$|[\s_.-])/i);
+        targets = m && known.has(m[1]) ? m[1] : null;
+      }
+      if (targets == null) { skipped.push(f.name); continue; }
+      const list = (Array.isArray(targets) ? targets : [targets]).map((t) => (typeof t === 'string' ? { dua: t } : t)).filter((t) => known.has(t.dua));
+      if (!list.length) { skipped.push(f.name); continue; }
+      const fileId = await MyAudio.addFile(f, f.name.replace(/\.[^.]+$/, ''));
+      for (const t of list) {
+        const old = await MyAudio.getClip(t.dua).catch(() => null);
+        if (old && old.file !== fileId) await MyAudio.removeClip(t.dua);
+        await MyAudio.setClip(t.dua, fileId, Number(t.start) || 0, t.end == null ? null : Number(t.end));
+        done++;
+      }
+      // evening copies share the morning audio
+      for (const d of duas) if (d.audio && list.some((t) => t.dua === d.audio) && !list.some((t) => t.dua === d.id)) {
+        const old = await MyAudio.getClip(d.id).catch(() => null);
+        if (!old) { await MyAudio.setClip(d.id, fileId, Number(list[0].start) || 0, list[0].end == null ? null : Number(list[0].end)); done++; }
+      }
+    }
+    return { done, skipped };
+  }
 
   // ---------- Quran ----------
   const Q = window.SakinaQuranUI.install({

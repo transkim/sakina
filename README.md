@@ -6,8 +6,8 @@ Duas, dhikr and prayer times for Windows and Android. Everything works offline e
 
 - **Quran**: the full Quran (Tanzil Uthmani text) with English meaning (M. H. Shakir) and transliteration. Browse by surah or juz, jump to any ayah (e.g. `2:255`), search the English and transliteration, bookmarks, and "continue reading".
 - **Recitation**: 10 reciters streamed ayah by ayah from everyayah.com, with the playing ayah highlighted, play from any ayah, repeat an ayah or a whole surah, and continue into the next surah.
-- **Dua audio**: 22 morning duas have audio by Sheikh Mishary Rashid Alafasy (used with permission), cut from his morning adhkar recording. Duas from the Qur'an can also play a verse recitation. On any dua you can add your own audio file (with start/end) or record your voice; it stays on your device.
-- **Duas**: 53 duas in 12 categories (morning and evening, sleep, prayer, Qur'anic duas, forgiveness, hardship, food and fasting, home and travel, illness, family, guidance, everyday). Arabic with vowels, transliteration, English meaning and source. Search, favourites, copy and share, and a tap counter for duas recited several times.
+- **Dua audio**: 22 morning duas have audio by Sheikh Mishary Rashid Alafasy (used with permission), cut from his morning adhkar recording. Duas from the Qur'an can also play a verse recitation. The evening adhkar that share the morning wording reuse the same recordings. On any dua you can add your own audio file (with start/end) or record your voice, or load a whole **audio pack** from Settings; it stays on your device.
+- **Duas**: 131 duas in 15 categories, following Hisnul Muslim (separate morning and evening adhkar, sleep, prayer, Qur'anic duas, forgiveness, hardship, food and fasting, home and travel, illness, family, guidance, death and grief, Hajj and Umrah, everyday). Arabic with vowels, transliteration, English meaning and source. Search, favourites, copy and share, a tap counter for duas recited several times, and **Play all** to listen to a whole category in order, repeating each dua its set number of times.
 - **Tasbih**: digital counter for 8 common adhkar, with targets (33, 99, 100…), rounds, haptic feedback on Android and a daily total. On Windows, Space or Enter counts.
 - **Prayer times**: calculated on the device for any location (GPS, a list of 90 cities, or coordinates), 14 calculation methods, standard or Hanafi Asr, Hijri date (Umm al-Qura) with ±2 day adjustment.
 - **Qibla**: bearing and distance to the Kaaba, with a live compass on phones.
@@ -42,3 +42,13 @@ GitHub Actions builds the Windows installer and an Android debug APK on every pu
 ## Content
 
 Arabic texts are from the Qur'an and the hadith collections cited on each dua. Transliterations and English meanings were written for Sakina; please report any mistake. Prayer times may differ by a minute or two from local mosque timetables.
+
+## Audio packs
+
+Settings → **Import audio pack** loads many recordings at once. A file is matched to a dua by its name (`m1.mp3`, `m1 Ayat al-Kursi.mp3`, see the ids in `app/js/duas.js`), or by a `pack.json` in the same selection:
+
+```json
+{ "track07.mp3": [{ "dua": "j1", "start": 1, "end": 4 }, "z1"] }
+```
+
+Imported audio is stored on the device only (IndexedDB) and is never uploaded or added to this repository. Packs made from MyDua (Hisnul Muslim) recordings are for the developer's personal learning use, with permission, and are not distributed with Sakina.
