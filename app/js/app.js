@@ -654,7 +654,7 @@
           <div class="hub"></div>
         </div></div>
         <div style="font-size:22px;font-weight:700">${bearing.toFixed(1)}° from North</div>
-        <div class="muted small" id="cmp">${Platform.platform === 'android' ? 'Hold your phone flat. The needle points to the Kaaba.' : 'Face this many degrees clockwise from true North.'}</div>
+        <div class="muted small" id="cmp">${Platform.mobile ? 'Hold your phone flat. The needle points to the Kaaba.' : 'Face this many degrees clockwise from true North.'}</div>
         <div class="muted small">${Math.round(Astro.distanceKm(L.lat, L.lng)).toLocaleString()} km to Makkah</div>
       </div>`;
 
@@ -673,9 +673,22 @@
       if (el) el.textContent = diff < 5 ? 'You are facing the Qibla ✓' : 'Turn until the needle points straight up.';
     };
     const evt = 'ondeviceorientationabsolute' in window ? 'deviceorientationabsolute' : 'deviceorientation';
-    window.addEventListener(evt, onOrient);
+    // iPhone asks for permission before sharing the compass, and only after a tap
+    const DOE = window.DeviceOrientationEvent;
+    if (DOE && typeof DOE.requestPermission === 'function') {
+      const el = document.getElementById('cmp');
+      if (el) {
+        el.innerHTML = '<button class="btn primary" id="cmpOn">🧭 Start compass</button>';
+        document.getElementById('cmpOn').onclick = async () => {
+          try {
+            if ((await DOE.requestPermission()) === 'granted') { el.textContent = 'Hold your phone flat. The needle points to the Kaaba.'; window.addEventListener(evt, onOrient); }
+            else el.textContent = 'Compass access was not allowed. Face the angle above, clockwise from North.';
+          } catch (_) { el.textContent = 'Face the angle above, clockwise from North.'; }
+        };
+      }
+    } else window.addEventListener(evt, onOrient);
     const tm = setTimeout(() => {
-      if (!got && Platform.platform === 'android') {
+      if (!got && Platform.mobile && !document.getElementById('cmpOn')) {
         const el = document.getElementById('cmp');
         if (el) el.textContent = 'No compass found. Face the angle above, clockwise from North.';
       }
@@ -720,7 +733,7 @@
 
       <h2>Reminders</h2>
       <div class="card">
-        <div class="field"><label for="palerts">Prayer time alerts<div class="muted small">${Platform.platform === 'android' ? 'Scheduled for the next 7 days, refreshed when you open the app' : 'Shown while Sakina is running (it stays in the system tray)'}</div></label><input type="checkbox" class="switch" id="palerts" ${settings.prayerAlerts ? 'checked' : ''}></div>
+        <div class="field"><label for="palerts">Prayer time alerts<div class="muted small">${Platform.mobile ? 'Scheduled for the next 7 days, refreshed when you open the app' : 'Shown while Sakina is running (it stays in the system tray)'}</div></label><input type="checkbox" class="switch" id="palerts" ${settings.prayerAlerts ? 'checked' : ''}></div>
         <div class="field"><label for="daily">Daily dua reminder</label><input type="checkbox" class="switch" id="daily" ${settings.dailyOn ? 'checked' : ''}></div>
         <div class="field"><label for="dtime">Reminder time</label><input type="time" id="dtime" value="${esc(settings.dailyTime)}"></div>
       </div>
@@ -751,7 +764,7 @@
 
       <h2>About</h2>
       <div class="card small">
-        <p style="margin-top:0"><b>Sakina</b> 0.5.0 · works offline, except Quran recitation.</p>
+        <p style="margin-top:0"><b>Sakina</b> 0.5.1 · works offline, except Quran recitation.</p>
         <p>Developed by <b>Hajj Abdul Hakim</b>.</p>
         <p>Arabic texts are from the Qur'an and the hadith collections named on each dua. Transliterations and English meanings are written for Sakina and are approximate; please check with a teacher you trust, and report any mistake.</p>
         <p>Quran: Tanzil Uthmani text (tanzil.net, CC BY 3.0, used unchanged), English by M. H. Shakir and transliteration via tanzil.net. Recitations stream from everyayah.com. Quran font: Amiri Quran (SIL OFL).</p>
@@ -890,6 +903,6 @@
   route();
   reschedule();
   // keep desktop timers and the home countdown fresh
-  setInterval(() => { if (Platform.platform !== 'android') reschedule(); }, 30 * 60 * 1000);
+  setInterval(() => { if (!Platform.mobile) reschedule(); }, 30 * 60 * 1000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) { reschedule(); if (/^#\/(home)?$/.test(location.hash || '#/')) route(); } });
 })();

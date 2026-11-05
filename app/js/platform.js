@@ -6,12 +6,13 @@
   const isNative = !!(cap && cap.isNativePlatform && cap.isNativePlatform());
   const P = (cap && cap.Plugins) || {};
   const isDesktop = !!root.sakinaDesktop;
-  const platform = isNative ? 'android' : isDesktop ? 'windows' : 'web';
+  const platform = isNative ? ((cap.getPlatform && cap.getPlatform()) || 'android') : isDesktop ? 'windows' : 'web';
 
   let desktopTimers = [];
 
   const Platform = {
     platform,
+    mobile: isNative,
 
     tap() {
       try {

@@ -73,3 +73,42 @@ jobs:
         with:
           name: Sakina-Android-apk
           path: mobile/Sakina-debug.apk
+
+  ios:
+    needs: test
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - name: Use the newest Xcode
+        run: |
+          X=$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)
+          sudo xcode-select -s "$X"
+          xcodebuild -version
+      - run: npm ci
+      - run: npm run sync:ios
+      - name: Build the app without signing
+        working-directory: mobile/ios/App
+        run: |
+          xcodebuild -project App.xcodeproj -scheme App -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build | tail -40
+          test -d build/Build/Products/Release-iphoneos/App.app
+      - name: Package unsigned IPA
+        working-directory: mobile/ios/App
+        run: |
+          mkdir -p Payload
+          cp -R build/Build/Products/Release-iphoneos/App.app Payload/
+          zip -qry ../../Sakina-unsigned.ipa Payload
+          ls -l ../../Sakina-unsigned.ipa
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Sakina-iPhone-ipa-unsigned
+          path: mobile/Sakina-unsigned.ipa

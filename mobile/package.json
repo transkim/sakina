@@ -1,17 +1,19 @@
 {
   "name": "sakina-mobile",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "private": true,
-  "description": "Sakina Android app (Capacitor shell around ../app)",
+  "description": "Sakina Android and iPhone apps (Capacitor shell around ../app)",
   "scripts": {
     "copy-web": "node -e \"const fs=require('fs');fs.rmSync('www',{recursive:true,force:true});fs.cpSync('../app','www',{recursive:true})\"",
-    "sync": "npm run copy-web && cap sync android"
+    "sync": "npm run copy-web && cap sync android",
+    "sync:ios": "npm run copy-web && cap sync ios"
   },
   "dependencies": {
     "@capacitor/android": "8.6.0",
     "@capacitor/app": "8.1.2",
     "@capacitor/core": "8.6.0",
     "@capacitor/haptics": "8.0.2",
+    "@capacitor/ios": "8.6.0",
     "@capacitor/local-notifications": "8.3.1",
     "@capacitor/share": "8.0.3"
   },
