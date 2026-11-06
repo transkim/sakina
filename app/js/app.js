@@ -26,6 +26,8 @@
   const catById = Object.fromEntries(categories.map((c) => [c.id, c]));
   const duaById = Object.fromEntries(duas.map((d) => [d.id, d]));
   const PRAYERS = [['fajr', 'Fajr'], ['sunrise', 'Sunrise'], ['dhuhr', 'Dhuhr'], ['asr', 'Asr'], ['maghrib', 'Maghrib'], ['isha', 'Isha']];
+  // On Fridays the midday prayer is Jumu'ah
+  const prayerName = (k, name, day) => (k === 'dhuhr' && day && day.getDay() === 5 ? "Jumu'ah" : name);
   const deviceTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
   function toast(msg) {
@@ -73,7 +75,7 @@
       if (!t) return null;
       for (const [k, name] of PRAYERS) {
         if (k === 'sunrise') continue;
-        if (t[k] && t[k] > now) return { key: k, name, at: t[k] };
+        if (t[k] && t[k] > now) return { key: k, name: prayerName(k, name, localDate(off)), at: t[k] };
       }
     }
     return null;
@@ -111,8 +113,10 @@
       let id = 100;
       for (let off = 0; off < 7; off++) {
         const t = timesFor(off);
-        for (const [k, name] of PRAYERS) {
+        const day = localDate(off);
+        for (const [k, n] of PRAYERS) {
           if (k === 'sunrise' || !t[k]) continue;
+          const name = prayerName(k, n, day);
           items.push({ id: id++, at: t[k], title: `${name} · ${fmtTime(t[k])}`, body: `It is time for ${name} in ${settings.location.name}.` });
         }
       }
@@ -641,7 +645,7 @@
             <div class="muted small">${esc(day.toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' }))} · ${esc(hijri(day))}</div></div>
           <a class="btn" href="#/prayer?d=${off + 1}" aria-label="Next day">›</a>
         </div>
-        <table class="ptable">${PRAYERS.map(([k, n]) => `<tr class="${k === 'sunrise' ? 'sun' : ''} ${np && np.key === k && t[k].getTime() === np.at.getTime() ? 'next' : ''}"><td>${n}</td><td>${fmtTime(t[k])}</td></tr>`).join('')}</table>
+        <table class="ptable">${PRAYERS.map(([k, n]) => `<tr class="${k === 'sunrise' ? 'sun' : ''} ${np && np.key === k && t[k].getTime() === np.at.getTime() ? 'next' : ''}"><td>${prayerName(k, n, day)}</td><td>${fmtTime(t[k])}</td></tr>`).join('')}</table>
         <div class="muted small" style="margin-top:8px">📍 ${esc(L.name)} · ${esc(Astro.METHODS[settings.method].name)} · Asr ${settings.asr === 'hanafi' ? 'Hanafi' : 'standard'} · <a href="#/settings">change</a></div>
       </div>
 
@@ -764,7 +768,7 @@
 
       <h2>About</h2>
       <div class="card small">
-        <p style="margin-top:0"><b>Sakina</b> 0.5.1 · works offline, except Quran recitation.</p>
+        <p style="margin-top:0"><b>Sakina</b> 0.5.2 · works offline, except Quran recitation.</p>
         <p>Developed by <b>Hajj Abdul Hakim</b>.</p>
         <p>Arabic texts are from the Qur'an and the hadith collections named on each dua. Transliterations and English meanings are written for Sakina and are approximate; please check with a teacher you trust, and report any mistake.</p>
         <p>Quran: Tanzil Uthmani text (tanzil.net, CC BY 3.0, used unchanged), English by M. H. Shakir and transliteration via tanzil.net. Recitations stream from everyayah.com. Quran font: Amiri Quran (SIL OFL).</p>
