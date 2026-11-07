@@ -341,3 +341,17 @@ body.has-player #toast { bottom: calc(150px + var(--safe-bottom)); }
 :root[data-theme="dusk"] .player { background: rgba(10, 46, 40, .94); }
 :root[data-theme="dusk"] .snum, :root[data-theme="dusk"] .anum { color: #7fe0c4; }
 :root[data-theme="dusk"] .tile .ic, :root[data-theme="dusk"] .item.now { border-color: var(--green-2); }
+
+/* ayah being recited: tinted card, coloured Arabic, a "Reciting" tag and a progress line */
+.ayah { position: relative; overflow: hidden; }
+.ayah .reciting { display: none; font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--hl, var(--primary)); margin-left: 8px; margin-right: auto; animation: pulse 1.6s infinite; }
+.ayah-top .anum + .reciting + .ayah-actions { margin-left: 0; }
+.ayah.playing .reciting { display: inline; }
+.ayah.playing { border-color: var(--hl, var(--primary)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--hl, var(--primary)) 25%, transparent); }
+.ayah.playing .qar { color: var(--hl, var(--primary)); }
+.ayah.playing::after { content: ''; position: absolute; left: 0; bottom: 0; height: 4px; width: calc(var(--p, 0) * 100%); background: var(--hl, var(--primary)); transition: width .25s linear; }
+:root[data-theme="dusk"] { --hl: #f2d48a; }
+:root[data-theme="dusk"] .ayah.playing { background: rgba(233, 196, 106, .14); }
+.ayah .qar { color: var(--text); }
+.ayah.playing .qar { color: var(--hl, var(--primary)); }
+:root[data-theme="dusk"] .ayah.playing { background: rgba(233, 196, 106, .2); border-color: #f2d48a; box-shadow: 0 0 0 3px rgba(242, 212, 138, .35), 0 8px 30px rgba(233, 196, 106, .25); }

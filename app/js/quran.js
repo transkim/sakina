@@ -82,10 +82,24 @@
       }
       // warm up the next ayah
       if (a < meta.ayahs) prefetch.src = urlFor(s, a + 1);
+      notify();
     }
-    function pause() { audio.pause(); P.playing = false; updateBar(); }
-    function resume() { if (!audio.src) return; audio.play().catch(() => {}); P.playing = true; updateBar(); }
-    function stop() { audio.pause(); audio.removeAttribute('src'); P.playing = false; P.surah = 0; highlight(false); updateBar(); }
+    // keep the phone's media notification in step (lets recitation continue in the background)
+    function notify() {
+      if (!P.surah) return Platform.nowPlaying(null);
+      const meta = SURAHS[P.surah - 1];
+      Platform.nowPlaying({ title: `${meta.tr} · ${P.surah}:${P.ayah}`, text: `${reciter().name} · Sakina`, playing: P.playing });
+    }
+    function pause() { audio.pause(); P.playing = false; updateBar(); notify(); }
+    function resume() { if (!audio.src) return; audio.play().catch(() => {}); P.playing = true; updateBar(); notify(); }
+    function stop() { audio.pause(); audio.removeAttribute('src'); P.playing = false; P.surah = 0; highlight(false); updateBar(); notify(); }
+    Platform.onPlaybackAction((a) => { if (a === 'pause') pause(); else if (a === 'play') resume(); else if (a === 'stop') stop(); });
+    // fill the bar under the ayah being recited
+    audio.addEventListener('timeupdate', () => {
+      if (P.basmala || !P.surah || !audio.duration) return;
+      const el = document.getElementById(`a${P.surah}-${P.ayah}`);
+      if (el) el.style.setProperty('--p', Math.min(1, audio.currentTime / audio.duration).toFixed(3));
+    });
     function step(d) {
       if (!P.surah) return;
       const meta = SURAHS[P.surah - 1];
@@ -106,7 +120,7 @@
         if (location.hash.startsWith('#/surah/')) location.hash = `#/surah/${n}`;
         return playAyah(n, 1, { basmala: true });
       }
-      P.playing = false; updateBar();
+      P.playing = false; updateBar(); notify();
     });
     audio.addEventListener('error', () => {
       if (!audio.getAttribute('src')) return;
@@ -160,7 +174,7 @@
     });
 
     function highlight(scroll) {
-      document.querySelectorAll('.ayah.playing').forEach((el) => el.classList.remove('playing'));
+      document.querySelectorAll('.ayah.playing').forEach((el) => { el.classList.remove('playing'); el.style.removeProperty('--p'); });
       if (!P.surah) return;
       const el = document.getElementById(`a${P.surah}-${P.ayah}`);
       if (el) {
@@ -263,7 +277,7 @@
         <div id="ayahs">${data.ar.map((ar, i) => {
           const a = i + 1;
           return `<div class="ayah" id="a${n}-${a}" data-a="${a}">
-            <div class="ayah-top"><span class="anum">${n}:${a}</span>
+            <div class="ayah-top"><span class="anum">${n}:${a}</span><span class="reciting">● Reciting</span>
               <span class="ayah-actions">
                 <button class="icon-btn" data-act="play" aria-label="Play ayah ${a}">▶</button>
                 <button class="icon-btn ${isBookmarked(n, a) ? 'on' : ''}" data-act="mark" aria-label="Bookmark ayah ${a}">🔖</button>

@@ -103,6 +103,19 @@
       }
     },
 
+    // Quran recitation in the background: Android keeps a media notification + foreground service.
+    async nowPlaying(info) {
+      const QP = P.QuranPlayback;
+      if (!isNative || !QP) return;
+      try {
+        if (info) await QP.update(info);
+        else await QP.stop();
+      } catch (e) { console.warn('background playback', e); }
+    },
+    onPlaybackAction(handler) {
+      if (isNative && P.QuranPlayback) P.QuranPlayback.addListener('action', (e) => handler(e.action));
+    },
+
     onBack(handler) {
       if (isNative && P.App) P.App.addListener('backButton', handler);
     },
