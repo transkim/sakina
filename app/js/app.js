@@ -73,11 +73,32 @@
   function gregorian(d) {
     return d.toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   }
+  // Hijri date. Some Android WebViews know the Umm al-Qura numbers but not the month names
+  // (they printed "May 27, 1448 BC AH"), so take the numbers and use our own names.
+  const HIJRI_MONTHS = ['Muharram', 'Safar', "Rabi' al-Awwal", "Rabi' al-Thani", 'Jumada al-Ula', 'Jumada al-Akhirah', 'Rajab', "Sha'ban", 'Ramadan', 'Shawwal', "Dhu al-Qa'dah", 'Dhu al-Hijjah'];
+  function hijriParts(x) {
+    try {
+      const f = new Intl.DateTimeFormat('en-u-ca-islamic-umalqura-nu-latn', { day: 'numeric', month: 'numeric', year: 'numeric', timeZone: 'UTC' });
+      if (/^islamic/.test(f.resolvedOptions().calendar)) {
+        const p = Object.fromEntries(f.formatToParts(new Date(Date.UTC(x.getFullYear(), x.getMonth(), x.getDate(), 12))).map((q) => [q.type, q.value]));
+        const y = parseInt(p.year, 10), m = parseInt(p.month, 10), dd = parseInt(p.day, 10);
+        if (y > 1300 && m >= 1 && m <= 12 && dd >= 1 && dd <= 30) return { y, m, d: dd };
+      }
+    } catch (_) { /* fall through */ }
+    // arithmetic (tabular) calendar as a fallback; may differ by a day, use the adjustment in Settings
+    const jd = Math.floor(Date.UTC(x.getFullYear(), x.getMonth(), x.getDate()) / 864e5) + 2440588;
+    let l = jd - 1948440 + 10632;
+    const n = Math.floor((l - 1) / 10631);
+    l = l - 10631 * n + 354;
+    const j = Math.floor((10985 - l) / 5316) * Math.floor((50 * l) / 17719) + Math.floor(l / 5670) * Math.floor((43 * l) / 15238);
+    l = l - Math.floor((30 - j) / 15) * Math.floor((17719 * j) / 50) - Math.floor(j / 16) * Math.floor((15238 * j) / 43) + 29;
+    const m = Math.floor((24 * l) / 709);
+    return { y: 30 * n + j - 30, m, d: l - Math.floor((709 * m) / 24) };
+  }
   function hijri(d) {
     const x = new Date(d); x.setDate(x.getDate() + Number(settings.hijriAdj || 0));
-    try {
-      return new Intl.DateTimeFormat('en-u-ca-islamic-umalqura', { day: 'numeric', month: 'long', year: 'numeric' }).format(x).replace(/\s?AH$/, '') + ' AH';
-    } catch (_) { return ''; }
+    const h = hijriParts(x);
+    return `${h.d} ${HIJRI_MONTHS[h.m - 1]} ${h.y} AH`;
   }
   function timesFor(offset = 0) {
     const L = settings.location;
@@ -763,45 +784,46 @@
     };
 
     // Qibla arc: the Kaaba sits on the arc at the angle you need to turn
+    const qarc = $view.querySelector('.qarc');
     const place = (heading) => {
-      let rel = ((bearing - heading + 540) % 360) - 180;
-      const behind = Math.abs(rel) > 90;
+      const rel = ((bearing - heading + 540) % 360) - 180;
       const shown = Math.max(-90, Math.min(90, rel));
       const k = document.getElementById('kaaba'), up = document.getElementById('kaabaUp');
       if (!k) return rel;
       k.setAttribute('transform', `rotate(${shown})`);
       up.setAttribute('transform', `rotate(${-shown} 0 -130)`);
-      k.style.opacity = behind ? .55 : 1;
+      k.style.opacity = Math.abs(rel) > 90 ? .55 : 1;
       return rel;
     };
     place(0);
-    let got = false;
-    const onOrient = (e) => {
-      let heading = null;
-      if (typeof e.webkitCompassHeading === 'number') heading = e.webkitCompassHeading;
-      else if (e.absolute && typeof e.alpha === 'number') heading = 360 - e.alpha;
-      if (heading == null) return;
-      got = true;
+    let aligned = false, lastHint = 0;
+    const cmp = document.getElementById('cmp');
+    const onHeading = (heading, accuracy) => {
+      if (heading == null) { cmp.textContent = `Qibla ${bearing.toFixed(0)}° from North · ${km} km to Makkah`; return; }
       const rel = place(heading);
-      const el = document.getElementById('cmp');
-      if (el) el.textContent = Math.abs(rel) < 5 ? 'You are facing the Qibla ✓' : Math.abs(rel) > 90 ? 'Turn around' : `Turn ${rel > 0 ? 'right' : 'left'} until the Kaaba is at the top`;
+      const now = Math.abs(rel) <= 4;
+      qarc.classList.add('live');
+      qarc.classList.toggle('aligned', now);
+      if (now && !aligned) Platform.done();
+      aligned = now;
+      if (Date.now() - lastHint < 150) return;
+      lastHint = Date.now();
+      const deg = Math.round(Math.abs(rel));
+      cmp.innerHTML = accuracy != null && accuracy < 2
+        ? 'Move your phone in a figure 8 to calibrate the compass'
+        : now ? 'You are facing the Qibla ✓'
+        : `Turn ${rel > 0 ? 'right' : 'left'} ${deg}°<span class="qdeg">Facing ${Math.round(heading)}° · Qibla ${Math.round(bearing)}°</span>`;
     };
-    const evt = 'ondeviceorientationabsolute' in window ? 'deviceorientationabsolute' : 'deviceorientation';
-    // iPhone asks for permission before sharing the compass, and only after a tap
-    const DOE = window.DeviceOrientationEvent;
-    const isIOS = Platform.platform === 'ios' || /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-    if (isIOS && DOE && typeof DOE.requestPermission === 'function') {
-      const el = document.getElementById('cmp');
-      el.innerHTML = '<button id="cmpOn">Tap to start the compass</button>';
+    const comp = Platform.compass(L.lat, L.lng, onHeading);
+    if (comp.needsTap) {
+      cmp.innerHTML = '<button id="cmpOn">Tap to start the compass</button>';
       document.getElementById('cmpOn').onclick = async () => {
-        try {
-          if ((await DOE.requestPermission()) === 'granted') { el.textContent = 'Hold your phone flat'; window.addEventListener(evt, onOrient); }
-          else el.textContent = `Qibla ${bearing.toFixed(0)}° from North`;
-        } catch (_) { el.textContent = `Qibla ${bearing.toFixed(0)}° from North`; }
+        try { if (!(await comp.needsTap())) cmp.textContent = `Qibla ${bearing.toFixed(0)}° from North`; else cmp.textContent = 'Hold your phone flat'; }
+        catch (_) { cmp.textContent = `Qibla ${bearing.toFixed(0)}° from North`; }
       };
-    } else window.addEventListener(evt, onOrient);
+    }
     const stopTick = np ? tickNext(np) : () => {};
-    cleanup = () => { window.removeEventListener(evt, onOrient); stopTick(); };
+    cleanup = () => { comp.stop(); stopTick(); };
   };
 
   async function detectLocation() {
@@ -873,7 +895,7 @@
 
       <h2>About</h2>
       <div class="card small">
-        <p style="margin-top:0"><b>Sakina</b> 0.7.1 · works offline, except Quran recitation.</p>
+        <p style="margin-top:0"><b>Sakina</b> 0.7.2 · works offline, except Quran recitation.</p>
         <p>Developed by <b>Hajj Abdul Hakim</b>.</p>
         <p>Arabic texts are from the Qur'an and the hadith collections named on each dua. Transliterations and English meanings are written for Sakina and are approximate; please check with a teacher you trust, and report any mistake.</p>
         <p>Quran: Tanzil Uthmani text (tanzil.net, CC BY 3.0, used unchanged), English by M. H. Shakir and transliteration via tanzil.net. Recitations stream from everyayah.com. Quran font: Amiri Quran (SIL OFL).</p>

@@ -103,6 +103,34 @@
       }
     },
 
+    /**
+     * Live compass. Calls onHeading(degreesFromTrueNorth, accuracy) until the returned stop() is called.
+     * Android uses the phone's rotation sensor (native); elsewhere the browser's device orientation.
+     * Returns { stop, needsTap } — on iPhone the first reading needs a tap (needsTap = function to call from a tap).
+     */
+    compass(lat, lng, onHeading) {
+      if (isNative && P.Compass && platform === 'android') {
+        let handle = null, stopped = false;
+        P.Compass.addListener('heading', (e) => onHeading(e.heading, e.accuracy)).then((h) => { handle = h; if (stopped) h.remove(); });
+        P.Compass.start({ lat, lng }).catch(() => onHeading(null));
+        return { stop() { stopped = true; if (handle) handle.remove(); P.Compass.stop().catch(() => {}); } };
+      }
+      const evt = 'ondeviceorientationabsolute' in root ? 'deviceorientationabsolute' : 'deviceorientation';
+      const h = (e) => {
+        let heading = null;
+        if (typeof e.webkitCompassHeading === 'number') heading = e.webkitCompassHeading;
+        else if (e.absolute && typeof e.alpha === 'number') heading = (360 - e.alpha) % 360;
+        if (heading != null) onHeading(heading, typeof e.webkitCompassAccuracy === 'number' && e.webkitCompassAccuracy > 25 ? 1 : 3);
+      };
+      const DOE = root.DeviceOrientationEvent;
+      const isIOS = platform === 'ios' || /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      const res = { stop() { root.removeEventListener(evt, h); } };
+      if (isIOS && DOE && typeof DOE.requestPermission === 'function') {
+        res.needsTap = async () => { const r = await DOE.requestPermission(); if (r === 'granted') root.addEventListener(evt, h); return r === 'granted'; };
+      } else root.addEventListener(evt, h);
+      return res;
+    },
+
     // Quran recitation in the background: Android keeps a media notification + foreground service.
     async nowPlaying(info) {
       const QP = P.QuranPlayback;

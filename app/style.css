@@ -357,3 +357,9 @@ body.has-player #toast { bottom: calc(150px + var(--safe-bottom)); }
 .hlswatches { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 .hlswatch { width: 30px; height: 30px; border-radius: 50%; border: 2px solid var(--line); cursor: pointer; padding: 0; }
 .hlswatch.on { border-color: var(--text); box-shadow: 0 0 0 3px color-mix(in srgb, var(--text) 25%, transparent); }
+/* live Qibla compass */
+.qarc .kaaba { transition: transform .12s linear, opacity .2s; }
+.qarc.live .arc { stroke: color-mix(in srgb, var(--gold) 45%, transparent); }
+.qarc.aligned .arc { stroke: var(--gold); stroke-width: 3; filter: drop-shadow(0 0 6px var(--gold)); }
+.qarc.aligned .kaaba rect.body { stroke: var(--gold); stroke-width: 3; filter: drop-shadow(0 0 8px var(--gold)); }
+.qhint .qdeg { display: block; margin-top: 4px; letter-spacing: .08em; color: var(--muted); font-size: 11px; }
