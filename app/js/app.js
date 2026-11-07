@@ -586,6 +586,9 @@
     const C = 2 * Math.PI * 140;
 
     const draw = () => {
+      // keep the dhikr row where it was, so the chosen dhikr stays in view
+      const oldChips = $view.querySelector('.chips');
+      const chipScroll = oldChips ? oldChips.scrollLeft : null;
       const z = dhikr.find((x) => x.id === state.id) || dhikr[0];
       const target = Number(settings.tasbihTarget) || z.target;
       const inRound = state.count % target || (state.count ? target : 0);
@@ -607,7 +610,22 @@
           </div>
           <div class="muted small" id="todayTotal">Today: ${state.today} in total</div>
         </div>`;
-      $view.querySelectorAll('.chip').forEach((b) => b.onclick = () => { state.id = b.dataset.id; state.count = 0; save(); draw(); });
+      const chips = $view.querySelector('.chips');
+      if (chipScroll != null) chips.scrollLeft = chipScroll;
+      const showOn = () => {
+        const on = chips.querySelector('.chip.on');
+        if (!on) return;
+        const cr = chips.getBoundingClientRect(), r = on.getBoundingClientRect();
+        if (r.left < cr.left) chips.scrollLeft += r.left - cr.left - 8;
+        else if (r.right > cr.right) chips.scrollLeft += r.right - cr.right + 8;
+      };
+      showOn();
+      requestAnimationFrame(showOn);
+      if (document.fonts && document.fonts.ready) document.fonts.ready.then(showOn);
+      $view.querySelectorAll('.chip').forEach((b) => b.onclick = () => {
+        if (b.dataset.id === state.id) return;
+        state.id = b.dataset.id; state.count = 0; save(); draw();
+      });
       document.getElementById('reset').onclick = () => { state.count = 0; save(); draw(); };
       const hear = document.getElementById('hear');
       if (hear) hear.onclick = () => { const a = new Audio(`audio/duas/dhikr-${z.id}.mp3`); a.onerror = () => toast('Audio is not included in this build.'); a.play().catch(() => {}); };
@@ -841,7 +859,7 @@
 
       <h2>About</h2>
       <div class="card small">
-        <p style="margin-top:0"><b>Sakina</b> 0.6.1 · works offline, except Quran recitation.</p>
+        <p style="margin-top:0"><b>Sakina</b> 0.6.2 · works offline, except Quran recitation.</p>
         <p>Developed by <b>Hajj Abdul Hakim</b>.</p>
         <p>Arabic texts are from the Qur'an and the hadith collections named on each dua. Transliterations and English meanings are written for Sakina and are approximate; please check with a teacher you trust, and report any mistake.</p>
         <p>Quran: Tanzil Uthmani text (tanzil.net, CC BY 3.0, used unchanged), English by M. H. Shakir and transliteration via tanzil.net. Recitations stream from everyayah.com. Quran font: Amiri Quran (SIL OFL).</p>
