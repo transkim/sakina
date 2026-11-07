@@ -41,7 +41,7 @@
     const dark = settings.theme === 'dark' || (settings.theme === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
     document.documentElement.dataset.theme = settings.theme === 'dusk' ? 'dusk' : dark ? 'dark' : 'light';
     const meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) meta.content = settings.theme === 'dusk' ? '#3a2a4c' : dark ? '#0e1513' : '#0f5c4d';
+    if (meta) meta.content = settings.theme === 'dusk' ? '#0f4a3f' : dark ? '#0e1513' : '#0f5c4d';
     document.documentElement.style.setProperty('--ar-size', settings.arSize + 'px');
   }
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
@@ -841,7 +841,7 @@
 
       <h2>About</h2>
       <div class="card small">
-        <p style="margin-top:0"><b>Sakina</b> 0.6.0 · works offline, except Quran recitation.</p>
+        <p style="margin-top:0"><b>Sakina</b> 0.6.1 · works offline, except Quran recitation.</p>
         <p>Developed by <b>Hajj Abdul Hakim</b>.</p>
         <p>Arabic texts are from the Qur'an and the hadith collections named on each dua. Transliterations and English meanings are written for Sakina and are approximate; please check with a teacher you trust, and report any mistake.</p>
         <p>Quran: Tanzil Uthmani text (tanzil.net, CC BY 3.0, used unchanged), English by M. H. Shakir and transliteration via tanzil.net. Recitations stream from everyayah.com. Quran font: Amiri Quran (SIL OFL).</p>

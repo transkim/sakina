@@ -44,8 +44,10 @@
 
 /* Dusk: evening-sky gradient, gold accents, glass cards (default look) */
 :root[data-theme="dusk"] {
-  --bg: #3a2a4c;
-  --sky: linear-gradient(180deg, #3a2a4c 0%, #5a3550 26%, #8a4848 52%, #b65a3e 74%, #a3613f 100%);
+  --bg: #0f4a3f;
+  --sky: linear-gradient(180deg, #0f4a3f 0%, #2a3a4a 20%, #4a3150 38%, #82464a 60%, #b65a3e 80%, #a3613f 100%);
+  --green: #1f8a6f;
+  --green-2: #2aa585;
   --surface: rgba(255, 255, 255, .11);
   --surface-2: rgba(255, 255, 255, .16);
   --solid: #4b2f4a;
@@ -326,3 +328,16 @@ body.has-player #toast { bottom: calc(150px + var(--safe-bottom)); }
 .bell:focus-visible { outline: 2px solid var(--gold); }
 .pmeta { color: var(--muted); font-size: 13px; text-align: center; margin: 12px 0 0; }
 .pmeta a { color: var(--gold); }
+
+/* Sakina green kept alongside the dusk gold */
+:root[data-theme="dusk"] .btn.primary, :root[data-theme="dusk"] .chip.on { background: var(--green); border-color: var(--green-2); color: #fff; }
+:root[data-theme="dusk"] .switch:checked { background: var(--green-2); }
+:root[data-theme="dusk"] .pcheck:checked { background: var(--green-2); border-color: var(--green-2); }
+:root[data-theme="dusk"] .pcheck:checked::after { border-color: #fff; }
+:root[data-theme="dusk"] .ring .prog { stroke: var(--green-2); }
+:root[data-theme="dusk"] .nav { background: rgba(10, 46, 40, .72); }
+:root[data-theme="dusk"] .nav a.active { color: #7fe0c4; }
+:root[data-theme="dusk"] .nav .brand { color: #7fe0c4; }
+:root[data-theme="dusk"] .player { background: rgba(10, 46, 40, .94); }
+:root[data-theme="dusk"] .snum, :root[data-theme="dusk"] .anum { color: #7fe0c4; }
+:root[data-theme="dusk"] .tile .ic, :root[data-theme="dusk"] .item.now { border-color: var(--green-2); }
