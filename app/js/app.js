@@ -11,12 +11,13 @@
     set(k, v) { try { localStorage.setItem('sakina.' + k, JSON.stringify(v)); } catch (_) { /* ignore */ } },
   };
   const DEFAULTS = {
-    theme: 'auto', arSize: 30, showTr: true, showEn: true,
+    theme: 'dusk', arSize: 30, alertOff: [], showTr: true, showEn: true,
     location: null, method: 'MWL', methodAuto: true, asr: 'standard', hijriAdj: 0,
     dailyOn: false, dailyTime: '08:00', prayerAlerts: false, tasbihTarget: 0,
     reciter: 'Alafasy_128kbps', autoNextSurah: false, followAudio: true,
   };
   const settings = Object.assign({}, DEFAULTS, store.get('settings', {}));
+  if (!settings.look2) { settings.theme = 'dusk'; settings.look2 = true; store.set('settings', settings); }
   const saveSettings = () => store.set('settings', settings);
   let favs = new Set(store.get('favs', []));
   const saveFavs = () => store.set('favs', [...favs]);
@@ -38,7 +39,9 @@
 
   function applyTheme() {
     const dark = settings.theme === 'dark' || (settings.theme === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
-    document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+    document.documentElement.dataset.theme = settings.theme === 'dusk' ? 'dusk' : dark ? 'dark' : 'light';
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.content = settings.theme === 'dusk' ? '#3a2a4c' : dark ? '#0e1513' : '#0f5c4d';
     document.documentElement.style.setProperty('--ar-size', settings.arSize + 'px');
   }
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
@@ -80,6 +83,21 @@
     }
     return null;
   }
+  // the prayer whose time has started and not yet ended (Isha runs until Fajr; after sunrise it is Duha)
+  function currentPrayer() {
+    const now = new Date();
+    const t = timesFor(0);
+    if (!t) return null;
+    let cur = null;
+    for (const [k, name] of PRAYERS) if (t[k] && t[k] <= now) cur = { key: k, name: k === 'sunrise' ? 'Duha' : prayerName(k, name, localDate(0)), at: t[k], day: 0 };
+    if (!cur) { const y = timesFor(-1); cur = { key: 'isha', name: 'Isha', at: y && y.isha, day: -1 }; }
+    return cur;
+  }
+  function fmtIn(ms) {
+    const m = Math.max(0, Math.round(ms / 60000));
+    const h = Math.floor(m / 60);
+    return h ? `${h} h ${m % 60} min` : `${m} min`;
+  }
   function countdown(ms) {
     const s = Math.max(0, Math.floor(ms / 1000));
     const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
@@ -115,7 +133,7 @@
         const t = timesFor(off);
         const day = localDate(off);
         for (const [k, n] of PRAYERS) {
-          if (k === 'sunrise' || !t[k]) continue;
+          if (k === 'sunrise' || !t[k] || (settings.alertOff || []).includes(k)) continue;
           const name = prayerName(k, n, day);
           items.push({ id: id++, at: t[k], title: `${name} · ${fmtTime(t[k])}`, body: `It is time for ${name} in ${settings.location.name}.` });
         }
@@ -141,18 +159,13 @@
     const L = settings.location;
     $view.innerHTML = `
       <div class="card hero">
-        <div class="muted small">${esc(gregorian(today))}</div>
-        <div style="font-size:18px;font-weight:600;margin-bottom:14px">${esc(hijri(today))}</div>
-        ${np ? `
-          <div class="row">
-            <div><div class="muted small">Next prayer${L ? ' in ' + esc(L.name) : ''}</div><div class="big">${np.name} ${fmtTime(np.at)}</div></div>
-            <div class="muted" id="cd">in ${countdown(np.at - new Date())}</div>
-          </div>` : `
-          <div class="muted">Set your location to see prayer times.</div>
-          <div style="margin-top:10px"><a class="btn" href="#/settings" style="color:inherit;background:rgba(255,255,255,.15);border-color:transparent">Choose location</a></div>`}
+        <div class="muted small">${esc(gregorian(today))} · ${esc(hijri(today))}</div>
+        ${np && L ? nowNextHtml(L) : `
+          <div class="muted" style="margin-top:8px">Set your location to see prayer times.</div>
+          <div style="margin-top:10px"><a class="btn" href="#/settings">Choose location</a></div>`}
       </div>
 
-      ${(() => { const h = today.getHours(); const c = catById[h >= 3 && h < 12 ? 'morning' : 'evening']; return `<a class="card" href="#/cat/${c.id}" style="display:flex;align-items:center;gap:12px;text-decoration:none;color:inherit">
+      ${(() => { const h = Number(new Intl.DateTimeFormat('en-US', { hour: 'numeric', hourCycle: 'h23', timeZone: tzOf() }).format(new Date())); const c = catById[h >= 3 && h < 12 ? 'morning' : 'evening']; return `<a class="card" href="#/cat/${c.id}" style="display:flex;align-items:center;gap:12px;text-decoration:none;color:inherit">
         <span style="font-size:26px">${c.icon}</span><div style="flex:1"><div class="muted small">Time for</div><div style="font-weight:600">${esc(c.name)}</div></div><span class="muted">›</span></a>`; })()}
 
       ${(() => { const lr = Q.lastRead(); return lr ? `<a class="card" href="#/surah/${lr.s}?a=${lr.a}" style="display:flex;align-items:center;gap:12px;text-decoration:none;color:inherit">
@@ -173,15 +186,7 @@
         ${categories.slice(0, 4).map(tile).join('')}
         <a class="tile" href="#/duas"><span class="ic">➕</span><span class="t">All categories</span><span class="c">${duas.length} duas</span></a>
       </div>`;
-    if (np) {
-      const iv = setInterval(() => {
-        const el = document.getElementById('cd');
-        if (!el) return;
-        if (np.at <= new Date()) return route();
-        el.textContent = 'in ' + countdown(np.at - new Date());
-      }, 1000);
-      cleanup = () => clearInterval(iv);
-    }
+    if (np) cleanup = tickNext(np);
   };
 
   function tile(c) {
@@ -623,6 +628,28 @@
     cleanup = () => document.removeEventListener('keydown', key);
   };
 
+  // Prayer header (NOW / NEXT) used on Today and Prayer screens
+  function nowNextHtml(L) {
+    const cur = currentPrayer(), np = nextPrayer();
+    if (!cur || !np) return '';
+    return `
+      <div class="ph">
+        <div><div class="eyebrow">Now</div><div class="now-name">${esc(cur.name)}</div>
+          <a class="loc" href="#/settings">${esc(L.name)}${L.country ? ', ' + esc(L.country) : ''}</a></div>
+        <div class="next"><div class="eyebrow">Next · ${esc(np.name)}</div><div class="next-time">${fmtTime(np.at)}</div><div class="next-in" id="cd">in ${fmtIn(np.at - new Date())}</div></div>
+      </div>`;
+  }
+  function tickNext(np) {
+    const iv = setInterval(() => {
+      const el = document.getElementById('cd');
+      if (!el) return;
+      if (np.at <= new Date()) return route();
+      el.textContent = 'in ' + fmtIn(np.at - new Date());
+    }, 15000);
+    return () => clearInterval(iv);
+  }
+  const BELL = '<svg viewBox="0 0 24 24"><path d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22zm7-6V11a7 7 0 0 0-5.5-6.84V3.5a1.5 1.5 0 0 0-3 0v.66A7 7 0 0 0 5 11v5l-2 2v1h18v-1z"/></svg>';
+
   views.prayer = (params) => {
     const L = settings.location;
     if (!L) {
@@ -634,35 +661,89 @@
     const off = Number(params.get('d') || 0);
     const t = timesFor(off);
     const np = off === 0 ? nextPrayer() : null;
+    const cur = off === 0 ? currentPrayer() : null;
     const day = localDate(off);
+    const dayKey = day.toDateString();
+    const prayed = store.get('prayed', {});
+    const done = new Set(prayed[dayKey] || []);
+    const offSet = new Set(settings.alertOff || []);
     const bearing = Astro.qibla(L.lat, L.lng);
-    $view.innerHTML = `
-      <h1>Prayer times</h1>
-      <div class="card">
-        <div class="daynav">
-          <a class="btn" href="#/prayer?d=${off - 1}" aria-label="Previous day">‹</a>
-          <div style="text-align:center"><div style="font-weight:600">${off === 0 ? 'Today' : esc(day.toLocaleDateString([], { weekday: 'long' }))}</div>
-            <div class="muted small">${esc(day.toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' }))} · ${esc(hijri(day))}</div></div>
-          <a class="btn" href="#/prayer?d=${off + 1}" aria-label="Next day">›</a>
-        </div>
-        <table class="ptable">${PRAYERS.map(([k, n]) => `<tr class="${k === 'sunrise' ? 'sun' : ''} ${np && np.key === k && t[k].getTime() === np.at.getTime() ? 'next' : ''}"><td>${prayerName(k, n, day)}</td><td>${fmtTime(t[k])}</td></tr>`).join('')}</table>
-        <div class="muted small" style="margin-top:8px">📍 ${esc(L.name)} · ${esc(Astro.METHODS[settings.method].name)} · Asr ${settings.asr === 'hanafi' ? 'Hanafi' : 'standard'} · <a href="#/settings">change</a></div>
-      </div>
-
-      <h2>Qibla</h2>
-      <div class="card" style="text-align:center">
-        <div class="compass"><div class="dial" id="dial">
-          <span style="top:6px">N</span><span style="bottom:6px">S</span>
-          <span style="top:50%;left:12px;transform:translateY(-50%)">W</span><span style="top:50%;left:auto;right:12px;transform:translateY(-50%)">E</span>
-          <div class="needle" style="transform:rotate(${bearing}deg)"><span class="kaaba">🕋</span></div>
-          <div class="hub"></div>
-        </div></div>
-        <div style="font-size:22px;font-weight:700">${bearing.toFixed(1)}° from North</div>
-        <div class="muted small" id="cmp">${Platform.mobile ? 'Hold your phone flat. The needle points to the Kaaba.' : 'Face this many degrees clockwise from true North.'}</div>
-        <div class="muted small">${Math.round(Astro.distanceKm(L.lat, L.lng)).toLocaleString()} km to Makkah</div>
+    const km = Math.round(Astro.distanceKm(L.lat, L.lng)).toLocaleString();
+    const imsak = t.fajr ? new Date(t.fajr.getTime() - 10 * 60000) : null;
+    const now = new Date();
+    const rows = PRAYERS.filter(([k]) => k !== 'sunrise').map(([k, n]) => {
+      const isNow = cur && cur.key === k && cur.day === 0;
+      const isNext = np && np.key === k && t[k] && t[k].getTime() === np.at.getTime();
+      const past = off < 0 || (off === 0 && t[k] && t[k] <= now && !isNow);
+      return `<div class="prow ${isNow ? 'now' : ''} ${past ? 'past' : ''}">
+        <input type="checkbox" class="pcheck" data-k="${k}" aria-label="Mark ${prayerName(k, n, day)} as prayed" ${done.has(k) ? 'checked' : ''}>
+        <div class="pn"><div class="n">${prayerName(k, n, day)}${isNow ? '<span class="tag now">Now</span>' : ''}${isNext ? '<span class="tag next">Next</span>' : ''}</div><div class="t">${fmtTime(t[k])}</div></div>
+        <button class="bell ${offSet.has(k) ? 'off' : ''}" data-k="${k}" aria-label="Alert for ${n}" aria-pressed="${!offSet.has(k)}">${BELL}</button>
       </div>`;
+    }).join('');
+    $view.innerHTML = `
+      ${off === 0 ? nowNextHtml(L) : ''}
+      <div class="qarc" aria-label="Qibla direction">
+        <svg viewBox="-150 -150 300 162">
+          <path class="arc" d="M -130 0 A 130 130 0 0 1 130 0"/>
+          <line class="base" x1="-130" y1="0" x2="130" y2="0"/>
+          <g class="kaaba" id="kaaba"><g id="kaabaUp"><rect class="body" x="-17" y="-147" width="34" height="34" rx="7"/><rect class="band" x="-16" y="-139" width="32" height="5"/></g></g>
+          <circle class="me" cx="0" cy="0" r="9"/><circle class="me-dot" cx="0" cy="0" r="3.2"/>
+        </svg>
+      </div>
+      <div class="qhint" id="cmp">Qibla ${bearing.toFixed(0)}° from North · ${km} km to Makkah</div>
 
-    // live compass where available
+      <div class="daybar">
+        <a href="#/prayer?d=${off - 1}" aria-label="Previous day">‹</a>
+        <div class="d"><b>${off === 0 ? 'Today' : esc(day.toLocaleDateString([], { weekday: 'long' }))}</b>
+          <div class="muted small">${esc(day.toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' }))} · ${esc(hijri(day))}</div></div>
+        <a href="#/prayer?d=${off + 1}" aria-label="Next day">›</a>
+      </div>
+      <div class="card pcard">
+        <div class="ptop"><span>Imsak <b>${fmtTime(imsak)}</b></span><span class="dot">·</span><span>Sunrise <b>${fmtTime(t.sunrise)}</b></span><span class="sp"></span>
+          <span class="bell ${settings.prayerAlerts ? '' : 'off'}" aria-hidden="true" style="width:24px;height:24px">${BELL}</span>
+          <input type="checkbox" class="switch" id="palerts2" aria-label="Prayer alerts" ${settings.prayerAlerts ? 'checked' : ''}></div>
+        ${rows}
+      </div>
+      <p class="pmeta">${esc(Astro.METHODS[settings.method].name)} · Asr ${settings.asr === 'hanafi' ? 'Hanafi' : 'standard'} · <a href="#/settings">change</a></p>`;
+
+    $view.querySelectorAll('.pcheck').forEach((c) => c.onchange = () => {
+      const all = store.get('prayed', {});
+      const set = new Set(all[dayKey] || []);
+      if (c.checked) { set.add(c.dataset.k); Platform.tap(); } else set.delete(c.dataset.k);
+      all[dayKey] = [...set];
+      // keep 60 days of history
+      const keys = Object.keys(all).sort((x, y) => new Date(y) - new Date(x));
+      for (const k of keys.slice(60)) delete all[k];
+      store.set('prayed', all);
+    });
+    $view.querySelectorAll('.prow .bell').forEach((b) => b.onclick = () => {
+      const set = new Set(settings.alertOff || []);
+      const k = b.dataset.k;
+      if (set.has(k)) set.delete(k); else set.add(k);
+      settings.alertOff = [...set]; saveSettings(); reschedule();
+      const on = !set.has(k);
+      b.classList.toggle('off', !on); b.setAttribute('aria-pressed', on);
+      toast(on ? 'Alert on' : 'Alert off');
+    });
+    document.getElementById('palerts2').onchange = async (e) => {
+      if (e.target.checked && !(await Platform.askNotify())) { e.target.checked = false; return toast('Notifications are blocked. Allow them in system settings.'); }
+      settings.prayerAlerts = e.target.checked; saveSettings(); reschedule(); route();
+    };
+
+    // Qibla arc: the Kaaba sits on the arc at the angle you need to turn
+    const place = (heading) => {
+      let rel = ((bearing - heading + 540) % 360) - 180;
+      const behind = Math.abs(rel) > 90;
+      const shown = Math.max(-90, Math.min(90, rel));
+      const k = document.getElementById('kaaba'), up = document.getElementById('kaabaUp');
+      if (!k) return rel;
+      k.setAttribute('transform', `rotate(${shown})`);
+      up.setAttribute('transform', `rotate(${-shown} 0 -130)`);
+      k.style.opacity = behind ? .55 : 1;
+      return rel;
+    };
+    place(0);
     let got = false;
     const onOrient = (e) => {
       let heading = null;
@@ -670,34 +751,26 @@
       else if (e.absolute && typeof e.alpha === 'number') heading = 360 - e.alpha;
       if (heading == null) return;
       got = true;
-      const dial = document.getElementById('dial');
-      if (dial) dial.style.transform = `rotate(${-heading}deg)`;
-      const diff = Math.abs(((bearing - heading + 540) % 360) - 180);
+      const rel = place(heading);
       const el = document.getElementById('cmp');
-      if (el) el.textContent = diff < 5 ? 'You are facing the Qibla ✓' : 'Turn until the needle points straight up.';
+      if (el) el.textContent = Math.abs(rel) < 5 ? 'You are facing the Qibla ✓' : Math.abs(rel) > 90 ? 'Turn around' : `Turn ${rel > 0 ? 'right' : 'left'} until the Kaaba is at the top`;
     };
     const evt = 'ondeviceorientationabsolute' in window ? 'deviceorientationabsolute' : 'deviceorientation';
     // iPhone asks for permission before sharing the compass, and only after a tap
     const DOE = window.DeviceOrientationEvent;
-    if (DOE && typeof DOE.requestPermission === 'function') {
+    const isIOS = Platform.platform === 'ios' || /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    if (isIOS && DOE && typeof DOE.requestPermission === 'function') {
       const el = document.getElementById('cmp');
-      if (el) {
-        el.innerHTML = '<button class="btn primary" id="cmpOn">🧭 Start compass</button>';
-        document.getElementById('cmpOn').onclick = async () => {
-          try {
-            if ((await DOE.requestPermission()) === 'granted') { el.textContent = 'Hold your phone flat. The needle points to the Kaaba.'; window.addEventListener(evt, onOrient); }
-            else el.textContent = 'Compass access was not allowed. Face the angle above, clockwise from North.';
-          } catch (_) { el.textContent = 'Face the angle above, clockwise from North.'; }
-        };
-      }
+      el.innerHTML = '<button id="cmpOn">Tap to start the compass</button>';
+      document.getElementById('cmpOn').onclick = async () => {
+        try {
+          if ((await DOE.requestPermission()) === 'granted') { el.textContent = 'Hold your phone flat'; window.addEventListener(evt, onOrient); }
+          else el.textContent = `Qibla ${bearing.toFixed(0)}° from North`;
+        } catch (_) { el.textContent = `Qibla ${bearing.toFixed(0)}° from North`; }
+      };
     } else window.addEventListener(evt, onOrient);
-    const tm = setTimeout(() => {
-      if (!got && Platform.mobile && !document.getElementById('cmpOn')) {
-        const el = document.getElementById('cmp');
-        if (el) el.textContent = 'No compass found. Face the angle above, clockwise from North.';
-      }
-    }, 3000);
-    cleanup = () => { window.removeEventListener(evt, onOrient); clearTimeout(tm); };
+    const stopTick = np ? tickNext(np) : () => {};
+    cleanup = () => { window.removeEventListener(evt, onOrient); stopTick(); };
   };
 
   async function detectLocation() {
@@ -711,7 +784,7 @@
         if (dd < bestD) { bestD = dd; best = c; }
       }
       const near = Math.sqrt(bestD) * 111 < 40;
-      setLocation({ name: near ? best.name : `${p.lat.toFixed(2)}, ${p.lng.toFixed(2)}`, lat: p.lat, lng: p.lng, tz: deviceTz });
+      setLocation({ name: near ? best.name : `${p.lat.toFixed(2)}, ${p.lng.toFixed(2)}`, country: near ? best.country : '', lat: p.lat, lng: p.lng, tz: deviceTz });
       toast('Location set');
       route();
     } catch (e) {
@@ -751,7 +824,7 @@
 
       <h2>Reading</h2>
       <div class="card">
-        <div class="field"><label for="theme">Theme</label><select id="theme">${['auto', 'light', 'dark'].map((t) => `<option value="${t}" ${settings.theme === t ? 'selected' : ''}>${t === 'auto' ? 'Match system' : t[0].toUpperCase() + t.slice(1)}</option>`).join('')}</select></div>
+        <div class="field"><label for="theme">Theme</label><select id="theme">${[['dusk', 'Dusk (evening sky)'], ['auto', 'Classic, match system'], ['light', 'Classic light'], ['dark', 'Classic dark']].map(([v, n]) => `<option value="${v}" ${settings.theme === v ? 'selected' : ''}>${n}</option>`).join('')}</select></div>
         <div class="field"><label for="ars">Arabic text size</label><input type="range" id="ars" min="22" max="48" value="${settings.arSize}"></div>
         <div class="ar" id="arPrev" style="margin:0">بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ</div>
         <div class="field"><label for="str">Show transliteration</label><input type="checkbox" class="switch" id="str" ${settings.showTr ? 'checked' : ''}></div>
@@ -768,12 +841,12 @@
 
       <h2>About</h2>
       <div class="card small">
-        <p style="margin-top:0"><b>Sakina</b> 0.5.3 · works offline, except Quran recitation.</p>
+        <p style="margin-top:0"><b>Sakina</b> 0.6.0 · works offline, except Quran recitation.</p>
         <p>Developed by <b>Hajj Abdul Hakim</b>.</p>
         <p>Arabic texts are from the Qur'an and the hadith collections named on each dua. Transliterations and English meanings are written for Sakina and are approximate; please check with a teacher you trust, and report any mistake.</p>
         <p>Quran: Tanzil Uthmani text (tanzil.net, CC BY 3.0, used unchanged), English by M. H. Shakir and transliteration via tanzil.net. Recitations stream from everyayah.com. Quran font: Amiri Quran (SIL OFL).</p>
         <p>Morning adhkar audio: Sheikh Mishary Rashid Alafasy, used with permission.</p>
-        <p>Prayer times are calculated on your device and may differ by a minute or two from your local mosque. Arabic font: Amiri (SIL Open Font License).</p>
+        <p>Prayer times are calculated on your device and may differ by a minute or two from your local mosque. Fonts: Amiri and Poppins (SIL Open Font License).</p>
       </div>`;
 
     const $ = (id) => document.getElementById(id);
@@ -781,7 +854,7 @@
     $('city').onchange = (e) => {
       if (e.target.value === '') return;
       const c = cities[Number(e.target.value)];
-      setLocation({ name: c.name, lat: c.lat, lng: c.lng, tz: c.tz });
+      setLocation({ name: c.name, country: c.country, lat: c.lat, lng: c.lng, tz: c.tz });
       toast(`Location set to ${c.name}`); route();
     };
     $('setc').onclick = () => {

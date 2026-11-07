@@ -12,7 +12,8 @@ Duas, dhikr and prayer times for Windows, Android and iPhone. Everything works o
 - **Prayer times**: calculated on the device for any location (GPS, a list of 103 cities, or coordinates), 14 calculation methods, standard or Hanafi Asr, Hijri date (Umm al-Qura) with ±2 day adjustment.
 - **Qibla**: bearing and distance to the Kaaba, with a live compass on phones.
 - **Reminders**: prayer time alerts and a daily dua reminder. Android schedules them with the system; on Windows Sakina keeps running in the tray so they still fire.
-- Light and dark themes, adjustable Arabic text size (Amiri font).
+- **Dusk** look by default (evening-sky gradient, gold accents, glass cards, Poppins font), plus classic light and dark themes; adjustable Arabic text size (Amiri font).
+- Prayer screen: current and next prayer with countdown, Qibla arc, Imsak and sunrise, tick off prayers you have prayed, and a bell per prayer to turn its alert on or off.
 
 ## Layout
 
