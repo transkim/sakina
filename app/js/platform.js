@@ -68,9 +68,10 @@
     /**
      * Replace all scheduled reminders.
      * items: [{ id, at: Date, title, body }] one-off alerts
-     * daily: { hour, minute, title, body } | null
+     * daily: { hour, minute, title, body, extra? } | array of those | null (repeat every day)
      */
     async schedule(items, daily) {
+      const dailies = (Array.isArray(daily) ? daily : daily ? [daily] : []).map((d, i) => ({ id: d.id || 1 + i, ...d }));
       if (isNative && P.LocalNotifications) {
         const LN = P.LocalNotifications;
         try {
@@ -79,7 +80,7 @@
           const list = items.filter((i) => i.at > new Date()).map((i) => ({
             id: i.id, title: i.title, body: i.body, schedule: { at: i.at, allowWhileIdle: true },
           }));
-          if (daily) list.push({ id: 1, title: daily.title, body: daily.body, schedule: { on: { hour: daily.hour, minute: daily.minute }, allowWhileIdle: true } });
+          for (const d of dailies) list.push({ id: d.id, title: d.title, body: d.body, extra: d.extra || null, schedule: { on: { hour: d.hour, minute: d.minute }, allowWhileIdle: true } });
           if (list.length) await LN.schedule({ notifications: list });
         } catch (e) { console.warn('schedule failed', e); }
         return;
@@ -95,11 +96,19 @@
         const ms = i.at - now;
         if (ms > 0 && ms < 2 ** 31 - 1) desktopTimers.push(setTimeout(() => show(i.title, i.body), ms));
       }
-      if (daily) {
+      for (const d of dailies) {
+        if (d.inApp) continue; // the app itself handles these while it runs
         const next = new Date();
-        next.setHours(daily.hour, daily.minute, 0, 0);
+        next.setHours(d.hour, d.minute, 0, 0);
         if (next <= new Date()) next.setDate(next.getDate() + 1);
-        desktopTimers.push(setTimeout(() => show(daily.title, daily.body), next - now));
+        desktopTimers.push(setTimeout(() => show(d.title, d.body), next - now));
+      }
+    },
+
+    /** Called with a notification's `extra` when the user taps a reminder (phones). */
+    onNotificationTap(handler) {
+      if (isNative && P.LocalNotifications) {
+        try { P.LocalNotifications.addListener('localNotificationActionPerformed', (e) => handler((e && e.notification && e.notification.extra) || {})); } catch (_) {}
       }
     },
 

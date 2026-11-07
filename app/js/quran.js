@@ -93,7 +93,7 @@
     function pause() { audio.pause(); P.playing = false; updateBar(); notify(); }
     function resume() { if (!audio.src) return; audio.play().catch(() => {}); P.playing = true; updateBar(); notify(); }
     function stop() { audio.pause(); audio.removeAttribute('src'); P.playing = false; P.surah = 0; highlight(false); updateBar(); notify(); }
-    Platform.onPlaybackAction((a) => { if (a === 'pause') pause(); else if (a === 'play') resume(); else if (a === 'stop') stop(); });
+    Platform.onPlaybackAction((a) => { if (!P.surah) return; if (a === 'pause') pause(); else if (a === 'play') resume(); else if (a === 'stop') stop(); });
     // fill the bar under the ayah being recited
     audio.addEventListener('timeupdate', () => {
       if (P.basmala || !P.surah || !audio.duration) return;

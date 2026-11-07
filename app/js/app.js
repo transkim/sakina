@@ -15,6 +15,7 @@
     location: null, method: 'MWL', methodAuto: true, asr: 'standard', hijriAdj: 0,
     dailyOn: false, dailyTime: '08:00', prayerAlerts: false, tasbihTarget: 0,
     reciter: 'Alafasy_128kbps', autoNextSurah: false, followAudio: true, hlColor: 'emerald',
+    amOn: false, amTime: '06:00', pmOn: false, pmTime: '17:30',
   };
   const settings = Object.assign({}, DEFAULTS, store.get('settings', {}));
   if (!settings.look2) { settings.theme = 'dusk'; settings.look2 = true; store.set('settings', settings); }
@@ -177,10 +178,45 @@
     if (settings.dailyOn) {
       const [hour, minute] = settings.dailyTime.split(':').map(Number);
       const d = duaOfDay();
-      daily = { hour, minute, title: 'A dua for today', body: `${d.title}: ${d.en}`.slice(0, 180) };
+      daily = { id: 1, hour, minute, title: 'A dua for today', body: `${d.title}: ${d.en}`.slice(0, 180) };
     }
-    await Platform.schedule(items, daily);
+    const dailies = daily ? [daily] : [];
+    for (const a of ADHKAR_AUTO) {
+      if (!settings[a.on]) continue;
+      const [hour, minute] = settings[a.time].split(':').map(Number);
+      // inApp: on Windows the app (in the tray) starts the audio itself, so no extra popup is needed
+      dailies.push({ id: a.nid, hour, minute, title: `${a.name} · ${settings[a.time]}`, body: Platform.mobile ? 'Tap to start the recitation.' : 'Starting the recitation now.', extra: { go: `#/cat/${a.cat}?auto=1` }, inApp: !Platform.mobile });
+    }
+    await Platform.schedule(items, dailies);
+    armAdhkar();
   }
+
+  // ---------- morning / evening adhkar that start by themselves ----------
+  const ADHKAR_AUTO = [
+    { cat: 'morning', name: 'Morning Adhkar', on: 'amOn', time: 'amTime', nid: 2 },
+    { cat: 'evening', name: 'Evening Adhkar', on: 'pmOn', time: 'pmTime', nid: 3 },
+  ];
+  let adhkarTimers = [], playingCat = null;
+  // While Sakina is open (or in the tray on Windows), start the recitation at the set time.
+  function armAdhkar() {
+    adhkarTimers.forEach(clearTimeout); adhkarTimers = [];
+    for (const a of ADHKAR_AUTO) {
+      if (!settings[a.on]) continue;
+      const [h, m] = settings[a.time].split(':').map(Number);
+      const next = new Date(); next.setHours(h, m, 0, 0);
+      if (next <= new Date()) next.setDate(next.getDate() + 1);
+      adhkarTimers.push(setTimeout(() => { startAdhkar(a.cat); armAdhkar(); }, Math.min(next - Date.now(), 2 ** 31 - 1)));
+    }
+  }
+  function startAdhkar(cat) {
+    if (playingCat === cat) return; // already reciting it
+    const h = `#/cat/${cat}?auto=1`;
+    if (location.hash === h) route(); else go(h);
+  }
+  Platform.onNotificationTap((extra) => {
+    const m = /^#\/cat\/(morning|evening)/.exec((extra && extra.go) || '');
+    if (m) startAdhkar(m[1]);
+  });
 
   // ---------- views ----------
   let cleanup = null;
@@ -268,6 +304,7 @@
   };
 
   views.cat = (params, id) => {
+    const auto = params.get('auto') === '1';
     const c = catById[id];
     if (!c) return go('#/duas');
     const list = duas.filter((d) => d.cat === id);
@@ -278,7 +315,16 @@
       <div class="muted small" id="playNow"></div>
       <div class="list">${list.map(item).join('')}</div>`;
     // ----- play every dua in this category that has audio, one after another -----
-    let alive = true, audio = null, playing = false;
+    let alive = true, audio = null, playing = false, paused = false, nowShown = false;
+    const shownow = (d) => { nowShown = true; Platform.nowPlaying({ title: c.name, text: `${d.title} · Sakina`, playing: !paused }); };
+    Platform.onPlaybackAction((a) => {
+      if (!alive || !playing || !audio) return;
+      if (a === 'pause') { paused = true; audio.pause(); }
+      else if (a === 'play') { paused = false; audio.play().catch(() => {}); }
+      else if (a === 'stop') return stop();
+      const cur = $view.querySelector('.item.now'); const d = cur && duas.find((x) => '#/dua/' + x.id === cur.getAttribute('href'));
+      if (d) shownow(d);
+    });
     const sourceFor = async (d) => {
       const c2 = await MyAudio.getClip(d.id).catch(() => null);
       if (c2) { const url = await MyAudio.fileUrl(c2.file); if (url) return { url, start: c2.start || 0, end: c2.end }; }
@@ -286,16 +332,17 @@
       return recorded.has(aid) ? { url: `audio/duas/${aid}.mp3`, start: 0, end: null } : null;
     };
     const stop = () => {
-      playing = false;
+      playing = false; paused = false; if (playingCat === id) playingCat = null;
       if (audio) { audio.pause(); audio.src = ''; audio = null; }
       const b = document.getElementById('playAll'); if (b) b.textContent = '▶ Play all';
       const n = document.getElementById('playNow'); if (n) n.textContent = '';
+      if (nowShown) { nowShown = false; Platform.nowPlaying(null); }
       $view.querySelectorAll('.item.now').forEach((x) => x.classList.remove('now'));
     };
     const playOne = (src, times) => new Promise((resolve) => {
       let n = 0;
       audio = new Audio(src.url);
-      const again = () => { if (!playing) return resolve(); audio.currentTime = src.start || 0; audio.play().catch(() => resolve()); };
+      const again = () => { if (!playing) return resolve(); audio.currentTime = src.start || 0; if (!paused) audio.play().catch(() => resolve()); };
       audio.onloadedmetadata = again;
       audio.ontimeupdate = () => { if (src.end != null && audio.currentTime >= src.end) audio.onended(); };
       audio.onended = () => { if (++n < times && playing) again(); else { audio.ontimeupdate = null; resolve(); } };
@@ -310,15 +357,18 @@
       document.getElementById('playRep').onchange = (e) => { settings.playAllRepeat = e.target.checked; saveSettings(); };
       document.getElementById('playAll').onclick = async (e) => {
         if (playing) return stop();
-        playing = true; e.currentTarget.textContent = '■ Stop';
+        playing = true; playingCat = id; e.currentTarget.textContent = '■ Stop';
         for (const { d, src } of items) {
           if (!playing || !alive) break;
           document.getElementById('playNow').textContent = `Playing: ${d.title}`;
           $view.querySelectorAll('.item').forEach((x) => x.classList.toggle('now', x.getAttribute('href') === '#/dua/' + d.id));
+          shownow(d);
+          const cur = $view.querySelector('.item.now'); if (cur) cur.scrollIntoView({ block: 'center', behavior: 'smooth' });
           await playOne(src, settings.playAllRepeat !== false ? d.repeat : 1);
         }
         stop();
       };
+      if (auto) { history.replaceState(null, '', `#/cat/${id}`); document.getElementById('playAll').click(); }
     })();
     cleanup = () => { alive = false; stop(); };
   };
@@ -868,6 +918,12 @@
         <div class="field"><label for="dtime">Reminder time</label><input type="time" id="dtime" value="${esc(settings.dailyTime)}"></div>
       </div>
 
+      <h2>Start adhkar automatically</h2>
+      <div class="card">
+        ${ADHKAR_AUTO.map((a) => `<div class="field"><label for="${a.on}">${a.name}<div class="muted small">${Platform.mobile ? 'Starts by itself if Sakina is open, otherwise a reminder starts it with one tap' : 'Starts by itself while Sakina is running (it stays in the system tray)'}</div></label><input type="checkbox" class="switch" id="${a.on}" ${settings[a.on] ? 'checked' : ''}></div>
+        <div class="field"><label for="${a.time}">Start time</label><input type="time" id="${a.time}" value="${esc(settings[a.time])}"></div>`).join('')}
+      </div>
+
       <h2>Quran recitation</h2>
       <div class="card">
         <div class="field"><label for="reciter">Reciter<div class="muted small">Streams over the internet</div></label><select id="reciter">${Q.RECITERS.map((r) => `<option value="${r.id}" ${settings.reciter === r.id ? 'selected' : ''}>${esc(r.name)}</option>`).join('')}</select></div>
@@ -895,7 +951,7 @@
 
       <h2>About</h2>
       <div class="card small">
-        <p style="margin-top:0"><b>Sakina</b> 0.7.3 · works offline, except Quran recitation.</p>
+        <p style="margin-top:0"><b>Sakina</b> 0.8.0 · works offline, except Quran recitation.</p>
         <p>Developed by <b>Hajj Abdul Hakim</b>.</p>
         <p>Arabic texts are from the Qur'an and the hadith collections named on each dua. Transliterations and English meanings are written for Sakina and are approximate; please check with a teacher you trust, and report any mistake.</p>
         <p>Quran: Tanzil Uthmani text (tanzil.net, CC BY 3.0, used unchanged), English by M. H. Shakir and transliteration via tanzil.net. Recitations stream from everyayah.com. Quran font: Amiri Quran (SIL OFL).</p>
@@ -931,6 +987,14 @@
     $('palerts').onchange = toggleNotify('prayerAlerts');
     $('daily').onchange = toggleNotify('dailyOn');
     $('dtime').onchange = (e) => { settings.dailyTime = e.target.value || '08:00'; saveSettings(); reschedule(); };
+    for (const a of ADHKAR_AUTO) {
+      $(a.on).onchange = async (e) => {
+        if (e.target.checked && Platform.mobile && !(await Platform.askNotify())) toast('Notifications are blocked, so it can only start while Sakina is open.');
+        settings[a.on] = e.target.checked; saveSettings(); reschedule();
+        if (e.target.checked) toast(`${a.name} will start at ${settings[a.time]}`);
+      };
+      $(a.time).onchange = (e) => { settings[a.time] = e.target.value || DEFAULTS[a.time]; saveSettings(); reschedule(); };
+    }
     $('reciter').onchange = (e) => { settings.reciter = e.target.value; saveSettings(); };
     $('follow').onchange = (e) => { settings.followAudio = e.target.checked; saveSettings(); };
     $view.querySelectorAll('.hlswatch').forEach((b) => b.onclick = () => {

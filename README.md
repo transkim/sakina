@@ -11,6 +11,7 @@ Duas, dhikr and prayer times for Windows, Android and iPhone. Everything works o
 - **Tasbih**: digital counter for 8 common adhkar, with targets (33, 99, 100…), rounds, haptic feedback on Android and a daily total. On Windows, Space or Enter counts.
 - **Prayer times**: calculated on the device for any location (GPS, a list of 103 cities, or coordinates), 14 calculation methods, standard or Hanafi Asr, Hijri date (Umm al-Qura) with ±2 day adjustment.
 - **Qibla**: bearing and distance to the Kaaba, with a live compass on phones (Android uses the phone's rotation sensor corrected to true north): the Kaaba moves on the arc, it tells you which way and how far to turn, and glows with a buzz when you face the Qibla.
+- **Morning and evening adhkar at a set time** (Settings): the recitation starts by itself at the time you pick while Sakina is open (or in the Windows tray). On phones a reminder appears too, and one tap starts it. It keeps playing with the screen off on Android.
 - **Reminders**: prayer time alerts and a daily dua reminder. Android schedules them with the system; on Windows Sakina keeps running in the tray so they still fire.
 - **Dusk** look by default (Sakina green fading into an evening-sky gradient, gold and green accents, glass cards, Poppins font), plus classic light and dark themes; adjustable Arabic text size (Amiri font).
 - Prayer screen: current and next prayer with countdown, Qibla arc, Imsak and sunrise, tick off prayers you have prayed, and a bell per prayer to turn its alert on or off.
