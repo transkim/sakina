@@ -798,8 +798,8 @@
     place(0);
     let aligned = false, lastHint = 0;
     const cmp = document.getElementById('cmp');
-    const onHeading = (heading, accuracy) => {
-      if (heading == null) { cmp.textContent = `Qibla ${bearing.toFixed(0)}° from North · ${km} km to Makkah`; return; }
+    const onHeading = (heading, accuracy, why) => {
+      if (heading == null) { cmp.innerHTML = `Qibla ${bearing.toFixed(0)}° from North · ${km} km to Makkah` + (why === 'none' && Platform.mobile ? '<span class="qdeg">No compass reading from this phone. Check that it has a compass sensor.</span>' : ''); return; }
       const rel = place(heading);
       const now = Math.abs(rel) <= 4;
       qarc.classList.add('live');
@@ -895,7 +895,7 @@
 
       <h2>About</h2>
       <div class="card small">
-        <p style="margin-top:0"><b>Sakina</b> 0.7.2 · works offline, except Quran recitation.</p>
+        <p style="margin-top:0"><b>Sakina</b> 0.7.3 · works offline, except Quran recitation.</p>
         <p>Developed by <b>Hajj Abdul Hakim</b>.</p>
         <p>Arabic texts are from the Qur'an and the hadith collections named on each dua. Transliterations and English meanings are written for Sakina and are approximate; please check with a teacher you trust, and report any mistake.</p>
         <p>Quran: Tanzil Uthmani text (tanzil.net, CC BY 3.0, used unchanged), English by M. H. Shakir and transliteration via tanzil.net. Recitations stream from everyayah.com. Quran font: Amiri Quran (SIL OFL).</p>

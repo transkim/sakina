@@ -109,25 +109,49 @@
      * Returns { stop, needsTap } — on iPhone the first reading needs a tap (needsTap = function to call from a tap).
      */
     compass(lat, lng, onHeading) {
-      if (isNative && P.Compass && platform === 'android') {
-        let handle = null, stopped = false;
-        P.Compass.addListener('heading', (e) => onHeading(e.heading, e.accuracy)).then((h) => { handle = h; if (stopped) h.remove(); });
-        P.Compass.start({ lat, lng }).catch(() => onHeading(null));
-        return { stop() { stopped = true; if (handle) handle.remove(); P.Compass.stop().catch(() => {}); } };
-      }
-      const evt = 'ondeviceorientationabsolute' in root ? 'deviceorientationabsolute' : 'deviceorientation';
-      const h = (e) => {
-        let heading = null;
-        if (typeof e.webkitCompassHeading === 'number') heading = e.webkitCompassHeading;
-        else if (e.absolute && typeof e.alpha === 'number') heading = (360 - e.alpha) % 360;
-        if (heading != null) onHeading(heading, typeof e.webkitCompassAccuracy === 'number' && e.webkitCompassAccuracy > 25 ? 1 : 3);
+      let got = false;
+      const emit = (heading, accuracy) => { if (heading != null) got = true; onHeading(heading, accuracy); };
+      const web = () => {
+        const evt = 'ondeviceorientationabsolute' in root ? 'deviceorientationabsolute' : 'deviceorientation';
+        const h = (e) => {
+          let heading = null;
+          if (typeof e.webkitCompassHeading === 'number') heading = e.webkitCompassHeading;
+          else if (e.absolute && typeof e.alpha === 'number') heading = (360 - e.alpha) % 360;
+          if (heading != null) emit(heading, typeof e.webkitCompassAccuracy === 'number' && e.webkitCompassAccuracy > 25 ? 1 : 3);
+        };
+        const DOE = root.DeviceOrientationEvent;
+        const isIOS = platform === 'ios' || /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+        const res = { stop() { root.removeEventListener(evt, h); } };
+        if (isIOS && DOE && typeof DOE.requestPermission === 'function') {
+          res.needsTap = async () => { const r = await DOE.requestPermission(); if (r === 'granted') root.addEventListener(evt, h); return r === 'granted'; };
+        } else root.addEventListener(evt, h);
+        return res;
       };
-      const DOE = root.DeviceOrientationEvent;
-      const isIOS = platform === 'ios' || /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-      const res = { stop() { root.removeEventListener(evt, h); } };
-      if (isIOS && DOE && typeof DOE.requestPermission === 'function') {
-        res.needsTap = async () => { const r = await DOE.requestPermission(); if (r === 'granted') root.addEventListener(evt, h); return r === 'granted'; };
-      } else root.addEventListener(evt, h);
+      const C = P.Compass;
+      if (isNative && C && platform === 'android') {
+        // Native rotation sensor (true north). If it fails or stays silent, fall back to the WebView's orientation events.
+        let handle = null, stopped = false, fallback = null, timer = null;
+        const useWeb = () => {
+          if (stopped || fallback) return;
+          fallback = web();
+          setTimeout(() => { if (!got && !stopped) onHeading(null, null, 'none'); }, 2500);
+        };
+        try {
+          // The bridge's addListener returns the handle directly (not a promise) without @capacitor/core loaded.
+          Promise.resolve(C.addListener('heading', (e) => { if (!stopped) emit(e.heading, e.accuracy); }))
+            .then((h) => { handle = h; if (stopped && h) h.remove(); }).catch(() => {});
+          Promise.resolve(C.start({ lat, lng })).catch(useWeb);
+          timer = setTimeout(() => { if (!got) useWeb(); }, 2500);
+        } catch (_) { useWeb(); }
+        return { stop() {
+          stopped = true; clearTimeout(timer);
+          try { if (handle) handle.remove(); } catch (_) {}
+          try { Promise.resolve(C.stop()).catch(() => {}); } catch (_) {}
+          if (fallback) fallback.stop();
+        } };
+      }
+      const res = web();
+      if (!res.needsTap) setTimeout(() => { if (!got) onHeading(null, null, 'none'); }, 3000);
       return res;
     },
 
