@@ -1,0 +1,38 @@
+name: Web app (iPhone)
+
+# Publishes Sakina as a web app at https://transkim.github.io/sakina/
+# iPhone users open it in Safari and tap Share > Add to Home Screen. No App Store, no cable, no signing.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - run: node tools/build-web.js
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist-web
+      - id: deployment
+        uses: actions/deploy-pages@v4

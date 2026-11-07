@@ -43,6 +43,13 @@ GitHub Actions builds the Windows installer, an Android debug APK and an unsigne
 
 ## iPhone
 
+**Easiest (plug and play):** open **https://transkim.github.io/sakina/** in Safari, tap **Share**, then **Add to Home Screen**. Sakina then opens from its own icon, full screen, and works offline. No App Store, cable, computer or Apple ID is needed, and it updates by itself. The web version cannot buzz, ring prayer alerts while closed, or play in the background with the screen locked; for those use the native app below.
+
+The `Web app (iPhone)` workflow builds it (`node tools/build-web.js` → `dist-web/`, with a service worker that stores the whole app on the phone) and publishes it with GitHub Pages.
+
+### Native iPhone app (advanced)
+
+
 The iPhone app is built on a Mac runner in GitHub Actions as `Sakina-unsigned.ipa`. Apple only lets signed apps run, so sign it while installing:
 
 - **Free Apple ID**: on Windows, install iTunes and [Sideloadly](https://sideloadly.io), plug in the iPhone, drag the IPA in and sign in with your Apple ID. Then on the iPhone trust the developer under Settings › General › VPN & Device Management, and turn on Developer Mode if asked. Free signing lasts 7 days; repeat to refresh.

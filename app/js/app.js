@@ -235,6 +235,21 @@
           <div style="margin-top:10px"><a class="btn" href="#/settings">Choose location</a></div>`}
       </div>
 
+      ${(() => {
+        const hint = Platform.installHint();
+        if (!hint || store.get('installHidden', false)) return '';
+        const SHARE = '<svg viewBox="0 0 24 24" width="18" height="18" style="vertical-align:-3px;fill:none;stroke:currentColor;stroke-width:2"><path d="M12 3v12M7 8l5-5 5 5M5 12v8h14v-8"/></svg>';
+        return `<div class="card install" id="installCard">
+          <div style="display:flex;align-items:center;gap:12px"><img src="img/icon-180.png" alt="" width="44" height="44" style="border-radius:11px">
+          <div style="flex:1"><div style="font-weight:600">Install Sakina on this phone</div><div class="muted small">It then opens from your Home Screen like any app, even offline.</div></div>
+          <button class="btn ghost" id="installHide" aria-label="Hide">✕</button></div>
+          ${hint === 'ios' ? `<ol class="install-steps">
+            <li>Make sure this page is open in <b>Safari</b>.</li>
+            <li>Tap the <b>Share</b> button ${SHARE} at the bottom of the screen.</li>
+            <li>Scroll down and tap <b>Add to Home Screen</b>, then <b>Add</b>.</li></ol>`
+          : `<div style="margin-top:10px"><button class="btn primary" id="installBtn">Install</button> <span class="muted small" id="installAlt">or use the browser menu ⋮ › Add to Home screen</span></div>`}
+        </div>`; })()}
+
       ${(() => { const h = Number(new Intl.DateTimeFormat('en-US', { hour: 'numeric', hourCycle: 'h23', timeZone: tzOf() }).format(new Date())); const c = catById[h >= 3 && h < 12 ? 'morning' : 'evening']; return `<a class="card" href="#/cat/${c.id}" style="display:flex;align-items:center;gap:12px;text-decoration:none;color:inherit">
         <span style="font-size:26px">${c.icon}</span><div style="flex:1"><div class="muted small">Time for</div><div style="font-weight:600">${esc(c.name)}</div></div><span class="muted">›</span></a>`; })()}
 
@@ -256,6 +271,15 @@
         ${categories.slice(0, 4).map(tile).join('')}
         <a class="tile" href="#/duas"><span class="ic">➕</span><span class="t">All categories</span><span class="c">${duas.length} duas</span></a>
       </div>`;
+    const ih = document.getElementById('installHide');
+    if (ih) ih.onclick = () => { store.set('installHidden', true); document.getElementById('installCard').remove(); };
+    const ib = document.getElementById('installBtn');
+    if (ib) ib.onclick = async () => {
+      const e = Platform.installPrompt;
+      if (!e) return toast('Open the browser menu ⋮ and choose Add to Home screen');
+      e.prompt(); const r = await e.userChoice.catch(() => null);
+      if (r && r.outcome === 'accepted') document.getElementById('installCard').remove();
+    };
     if (np) cleanup = tickNext(np);
   };
 
@@ -913,14 +937,14 @@
 
       <h2>Reminders</h2>
       <div class="card">
-        <div class="field"><label for="palerts">Prayer time alerts<div class="muted small">${Platform.mobile ? 'Scheduled for the next 7 days, refreshed when you open the app' : 'Shown while Sakina is running (it stays in the system tray)'}</div></label><input type="checkbox" class="switch" id="palerts" ${settings.prayerAlerts ? 'checked' : ''}></div>
+        <div class="field"><label for="palerts">Prayer time alerts<div class="muted small">${Platform.web ? 'Shown while Sakina is open' : Platform.mobile ? 'Scheduled for the next 7 days, refreshed when you open the app' : 'Shown while Sakina is running (it stays in the system tray)'}</div></label><input type="checkbox" class="switch" id="palerts" ${settings.prayerAlerts ? 'checked' : ''}></div>
         <div class="field"><label for="daily">Daily dua reminder</label><input type="checkbox" class="switch" id="daily" ${settings.dailyOn ? 'checked' : ''}></div>
         <div class="field"><label for="dtime">Reminder time</label><input type="time" id="dtime" value="${esc(settings.dailyTime)}"></div>
       </div>
 
       <h2>Start adhkar automatically</h2>
       <div class="card">
-        ${ADHKAR_AUTO.map((a) => `<div class="field"><label for="${a.on}">${a.name}<div class="muted small">${Platform.mobile ? 'Starts by itself if Sakina is open, otherwise a reminder starts it with one tap' : 'Starts by itself while Sakina is running (it stays in the system tray)'}</div></label><input type="checkbox" class="switch" id="${a.on}" ${settings[a.on] ? 'checked' : ''}></div>
+        ${ADHKAR_AUTO.map((a) => `<div class="field"><label for="${a.on}">${a.name}<div class="muted small">${Platform.web ? 'Starts by itself while Sakina is open on screen' : Platform.mobile ? 'Starts by itself if Sakina is open, otherwise a reminder starts it with one tap' : 'Starts by itself while Sakina is running (it stays in the system tray)'}</div></label><input type="checkbox" class="switch" id="${a.on}" ${settings[a.on] ? 'checked' : ''}></div>
         <div class="field"><label for="${a.time}">Start time</label><input type="time" id="${a.time}" value="${esc(settings[a.time])}"></div>`).join('')}
       </div>
 
@@ -951,7 +975,7 @@
 
       <h2>About</h2>
       <div class="card small">
-        <p style="margin-top:0"><b>Sakina</b> 0.8.0 · works offline, except Quran recitation.</p>
+        <p style="margin-top:0"><b>Sakina</b> 0.8.1 · works offline, except Quran recitation.</p>
         <p>Developed by <b>Hajj Abdul Hakim</b>.</p>
         <p>Arabic texts are from the Qur'an and the hadith collections named on each dua. Transliterations and English meanings are written for Sakina and are approximate; please check with a teacher you trust, and report any mistake.</p>
         <p>Quran: Tanzil Uthmani text (tanzil.net, CC BY 3.0, used unchanged), English by M. H. Shakir and transliteration via tanzil.net. Recitations stream from everyayah.com. Quran font: Amiri Quran (SIL OFL).</p>

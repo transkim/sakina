@@ -363,3 +363,8 @@ body.has-player #toast { bottom: calc(150px + var(--safe-bottom)); }
 .qarc.aligned .arc { stroke: var(--gold); stroke-width: 3; filter: drop-shadow(0 0 6px var(--gold)); }
 .qarc.aligned .kaaba rect.body { stroke: var(--gold); stroke-width: 3; filter: drop-shadow(0 0 8px var(--gold)); }
 .qhint .qdeg { display: block; margin-top: 4px; letter-spacing: .08em; color: var(--muted); font-size: 11px; }
+
+/* web version: "install on this phone" card */
+.install-steps { margin: 12px 0 2px; padding-left: 22px; line-height: 1.7; }
+.install-steps b { color: var(--gold, #e9c46a); }
+#installHide { padding: 4px 10px; min-height: 0; }

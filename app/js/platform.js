@@ -10,9 +10,27 @@
 
   let desktopTimers = [];
 
+  // Web version: keep the app on the phone (offline) and allow "Install" on Android Chrome.
+  if (!isNative && !isDesktop && root.location && (root.location.protocol === 'https:' || root.location.hostname === 'localhost') && 'serviceWorker' in root.navigator) {
+    root.addEventListener('load', () => root.navigator.serviceWorker.register('sw.js').catch(() => {}));
+  }
+  if (!isNative && !isDesktop) root.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); Platform.installPrompt = e; });
+
   const Platform = {
     platform,
     mobile: isNative,
+    web: !isNative && !isDesktop,
+    // Web version (iPhone "Add to Home Screen"): 'ios' / 'android' when it should show how to install, else null.
+    installHint() {
+      if (isNative || isDesktop) return null;
+      const standalone = root.navigator.standalone === true || (root.matchMedia && root.matchMedia('(display-mode: standalone)').matches);
+      if (standalone) return null;
+      const ua = root.navigator.userAgent;
+      if (/iPhone|iPad|iPod/.test(ua) || (root.navigator.platform === 'MacIntel' && root.navigator.maxTouchPoints > 1)) return 'ios';
+      if (/Android/.test(ua)) return 'android';
+      return null;
+    },
+    installPrompt: null,
 
     tap() {
       try {
