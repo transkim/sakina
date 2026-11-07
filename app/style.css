@@ -342,16 +342,18 @@ body.has-player #toast { bottom: calc(150px + var(--safe-bottom)); }
 :root[data-theme="dusk"] .snum, :root[data-theme="dusk"] .anum { color: #7fe0c4; }
 :root[data-theme="dusk"] .tile .ic, :root[data-theme="dusk"] .item.now { border-color: var(--green-2); }
 
-/* ayah being recited: tinted card, coloured Arabic, a "Reciting" tag and a progress line */
+/* ayah being recited: tinted glowing card, coloured Arabic, a "Reciting" tag and a progress line.
+   --hl is the highlight colour picked in Settings (set from app.js). */
 .ayah { position: relative; overflow: hidden; }
-.ayah .reciting { display: none; font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--hl, var(--primary)); margin-left: 8px; margin-right: auto; animation: pulse 1.6s infinite; }
-.ayah-top .anum + .reciting + .ayah-actions { margin-left: 0; }
+.ayah .qar { color: var(--text); transition: color .35s; }
+.ayah .reciting { display: none; font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--hl); margin-left: 8px; margin-right: auto; }
+.ayah .reciting::before { content: ''; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--hl); margin-right: 6px; vertical-align: 1px; animation: pulse 1.4s infinite; }
 .ayah.playing .reciting { display: inline; }
-.ayah.playing { border-color: var(--hl, var(--primary)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--hl, var(--primary)) 25%, transparent); }
-.ayah.playing .qar { color: var(--hl, var(--primary)); }
-.ayah.playing::after { content: ''; position: absolute; left: 0; bottom: 0; height: 4px; width: calc(var(--p, 0) * 100%); background: var(--hl, var(--primary)); transition: width .25s linear; }
-:root[data-theme="dusk"] { --hl: #f2d48a; }
-:root[data-theme="dusk"] .ayah.playing { background: rgba(233, 196, 106, .14); }
-.ayah .qar { color: var(--text); }
-.ayah.playing .qar { color: var(--hl, var(--primary)); }
-:root[data-theme="dusk"] .ayah.playing { background: rgba(233, 196, 106, .2); border-color: #f2d48a; box-shadow: 0 0 0 3px rgba(242, 212, 138, .35), 0 8px 30px rgba(233, 196, 106, .25); }
+.ayah.playing { border-color: var(--hl); background: var(--hl-card, color-mix(in srgb, var(--hl) 16%, var(--surface))); box-shadow: 0 0 0 3px color-mix(in srgb, var(--hl) 30%, transparent), 0 10px 34px color-mix(in srgb, var(--hl) 28%, transparent); animation: hlIn .45s ease-out; }
+.ayah.playing .qar { color: var(--hl); }
+.ayah.playing .anum { background: var(--hl); color: #10201c; }
+.ayah.playing::after { content: ''; position: absolute; left: 0; bottom: 0; height: 4px; border-radius: 0 4px 4px 0; width: calc(var(--p, 0) * 100%); background: linear-gradient(90deg, color-mix(in srgb, var(--hl) 55%, transparent), var(--hl)); transition: width .25s linear; }
+@keyframes hlIn { from { transform: scale(.985); box-shadow: 0 0 0 0 transparent; } }
+.hlswatches { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.hlswatch { width: 30px; height: 30px; border-radius: 50%; border: 2px solid var(--line); cursor: pointer; padding: 0; }
+.hlswatch.on { border-color: var(--text); box-shadow: 0 0 0 3px color-mix(in srgb, var(--text) 25%, transparent); }

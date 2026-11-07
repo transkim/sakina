@@ -277,7 +277,7 @@
         <div id="ayahs">${data.ar.map((ar, i) => {
           const a = i + 1;
           return `<div class="ayah" id="a${n}-${a}" data-a="${a}">
-            <div class="ayah-top"><span class="anum">${n}:${a}</span><span class="reciting">● Reciting</span>
+            <div class="ayah-top"><span class="anum">${n}:${a}</span><span class="reciting">Reciting</span>
               <span class="ayah-actions">
                 <button class="icon-btn" data-act="play" aria-label="Play ayah ${a}">▶</button>
                 <button class="icon-btn ${isBookmarked(n, a) ? 'on' : ''}" data-act="mark" aria-label="Bookmark ayah ${a}">🔖</button>

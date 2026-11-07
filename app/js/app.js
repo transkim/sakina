@@ -14,7 +14,7 @@
     theme: 'dusk', arSize: 30, alertOff: [], showTr: true, showEn: true,
     location: null, method: 'MWL', methodAuto: true, asr: 'standard', hijriAdj: 0,
     dailyOn: false, dailyTime: '08:00', prayerAlerts: false, tasbihTarget: 0,
-    reciter: 'Alafasy_128kbps', autoNextSurah: false, followAudio: true,
+    reciter: 'Alafasy_128kbps', autoNextSurah: false, followAudio: true, hlColor: 'emerald',
   };
   const settings = Object.assign({}, DEFAULTS, store.get('settings', {}));
   if (!settings.look2) { settings.theme = 'dusk'; settings.look2 = true; store.set('settings', settings); }
@@ -37,12 +37,25 @@
     clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('show'), 2200);
   }
 
+  // highlight colours for the ayah being recited: [name, on dark/dusk, on light]
+  const HL_COLORS = {
+    emerald: ['Emerald', '#6ee7b7', '#047857'],
+    gold: ['Gold', '#f2d48a', '#a16207'],
+    rose: ['Rose', '#fda4af', '#be123c'],
+    sky: ['Sky blue', '#7dd3fc', '#0369a1'],
+    lilac: ['Lilac', '#d8b4fe', '#7e22ce'],
+  };
   function applyTheme() {
     const dark = settings.theme === 'dark' || (settings.theme === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
     document.documentElement.dataset.theme = settings.theme === 'dusk' ? 'dusk' : dark ? 'dark' : 'light';
     const meta = document.querySelector('meta[name="theme-color"]');
     if (meta) meta.content = settings.theme === 'dusk' ? '#0f4a3f' : dark ? '#0e1513' : '#0f5c4d';
     document.documentElement.style.setProperty('--ar-size', settings.arSize + 'px');
+    const hl = HL_COLORS[settings.hlColor] || HL_COLORS.emerald;
+    const lightBg = settings.theme === 'light' || (settings.theme === 'auto' && !dark);
+    document.documentElement.style.setProperty('--hl', lightBg ? hl[2] : hl[1]);
+    // the ayah being recited sits on a deep card so the coloured Arabic glows
+    document.documentElement.style.setProperty('--hl-card', lightBg ? `color-mix(in srgb, ${hl[2]} 9%, #ffffff)` : `linear-gradient(135deg, color-mix(in srgb, ${hl[1]} 24%, #0c2420), color-mix(in srgb, ${hl[1]} 10%, #0c2420))`);
   }
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
 
@@ -836,6 +849,7 @@
       <h2>Quran recitation</h2>
       <div class="card">
         <div class="field"><label for="reciter">Reciter<div class="muted small">Streams over the internet</div></label><select id="reciter">${Q.RECITERS.map((r) => `<option value="${r.id}" ${settings.reciter === r.id ? 'selected' : ''}>${esc(r.name)}</option>`).join('')}</select></div>
+        <div class="field"><label>Highlight colour<div class="muted small">For the ayah being recited</div></label><span class="hlswatches">${Object.entries(HL_COLORS).map(([k, c]) => `<button class="hlswatch ${settings.hlColor === k ? 'on' : ''}" data-hl="${k}" title="${c[0]}" aria-label="${c[0]}" style="background:${c[1]}"></button>`).join('')}</span></div>
         <div class="field"><label for="follow">Scroll to the ayah being recited</label><input type="checkbox" class="switch" id="follow" ${settings.followAudio !== false ? 'checked' : ''}></div>
         <div class="field"><label for="autonext">Continue to the next surah</label><input type="checkbox" class="switch" id="autonext" ${settings.autoNextSurah ? 'checked' : ''}></div>
       </div>
@@ -859,7 +873,7 @@
 
       <h2>About</h2>
       <div class="card small">
-        <p style="margin-top:0"><b>Sakina</b> 0.7.0 · works offline, except Quran recitation.</p>
+        <p style="margin-top:0"><b>Sakina</b> 0.7.1 · works offline, except Quran recitation.</p>
         <p>Developed by <b>Hajj Abdul Hakim</b>.</p>
         <p>Arabic texts are from the Qur'an and the hadith collections named on each dua. Transliterations and English meanings are written for Sakina and are approximate; please check with a teacher you trust, and report any mistake.</p>
         <p>Quran: Tanzil Uthmani text (tanzil.net, CC BY 3.0, used unchanged), English by M. H. Shakir and transliteration via tanzil.net. Recitations stream from everyayah.com. Quran font: Amiri Quran (SIL OFL).</p>
@@ -897,6 +911,11 @@
     $('dtime').onchange = (e) => { settings.dailyTime = e.target.value || '08:00'; saveSettings(); reschedule(); };
     $('reciter').onchange = (e) => { settings.reciter = e.target.value; saveSettings(); };
     $('follow').onchange = (e) => { settings.followAudio = e.target.checked; saveSettings(); };
+    $view.querySelectorAll('.hlswatch').forEach((b) => b.onclick = () => {
+      settings.hlColor = b.dataset.hl; saveSettings(); applyTheme();
+      $view.querySelectorAll('.hlswatch').forEach((x) => x.classList.toggle('on', x === b));
+      toast(`Highlight: ${HL_COLORS[b.dataset.hl][0]}`);
+    });
     $('autonext').onchange = (e) => { settings.autoNextSurah = e.target.checked; saveSettings(); };
     $('theme').onchange = (e) => { settings.theme = e.target.value; saveSettings(); applyTheme(); };
     $('ars').oninput = (e) => { settings.arSize = Number(e.target.value); saveSettings(); applyTheme(); };
