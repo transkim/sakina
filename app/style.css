@@ -397,3 +397,5 @@ body.has-player #toast { bottom: calc(150px + var(--safe-bottom)); }
 .zres .zdue { color: var(--gold, #e9c46a); font-size: 20px; }
 .paybtns { display: grid; gap: 8px; }
 .btn.pay { justify-content: center; font-weight: 600; padding: 12px; }
+.paymethods { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+.paymethods span { font-size: 12px; font-weight: 600; padding: 4px 9px; border-radius: 8px; color: #fff; }

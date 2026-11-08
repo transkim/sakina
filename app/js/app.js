@@ -556,7 +556,7 @@
     const money = (v) => `${z.cur} ${Math.round(v).toLocaleString()}`;
     const inp = (id, label, hint = '', type = 'text') => `<div class="field"><label for="z_${id}">${label}${hint ? `<div class="muted small">${hint}</div>` : ''}</label><input type="${type}" inputmode="decimal" id="z_${id}" value="${esc(z[id])}" placeholder="0"></div>`;
     const links = G.links || {};
-    const pay = [['mtn', 'MTN Mobile Money', '#ffcb05', '#1a1a1a'], ['airtel', 'Airtel Money', '#e40000', '#fff'], ['card', 'Visa / Mastercard', '#1a1f71', '#fff']].filter(([k]) => links[k]);
+    const pay = links.all ? [['all', 'Give now', '#e9c46a', '#1a1a1a']] : [['mtn', 'MTN Mobile Money', '#ffcb05', '#1a1a1a'], ['airtel', 'Airtel Money', '#e40000', '#fff'], ['card', 'Visa / Mastercard', '#1a1f71', '#fff']].filter(([k]) => links[k]);
     $view.innerHTML = `
       <a class="back" href="#/home">‹ Today</a>
       <h1>🤲 Zakat</h1>
@@ -592,6 +592,7 @@
         ${G.enabled && pay.length ? `
           <div style="font-weight:600">${esc(G.org)}</div>
           ${G.about ? `<div class="muted small" style="margin:4px 0 10px">${esc(G.about)}</div>` : ''}
+          ${links.all ? '<div class="paymethods"><span style="background:#ffcb05;color:#1a1a1a">MTN MoMo</span><span style="background:#e40000">Airtel Money</span><span style="background:#1a1f71">Visa</span></div>' : ''}
           <div class="paybtns">${pay.map(([k, name, bg, fg]) => `<a class="btn pay" href="${esc(links[k])}" target="_blank" rel="noopener" style="background:${bg};color:${fg};border-color:${bg}">${name}</a>`).join('')}</div>
           <div class="muted small" style="margin-top:10px">Payment happens on the provider's secure page; Sakina never sees your PIN or card. ${G.contact ? `Questions or a receipt: ${esc(G.contact)}.` : ''} ${G.report ? `<a href="${esc(G.report)}" target="_blank" rel="noopener">See what was collected and given out</a>.` : ''}</div>`
         : `<div class="muted">Giving through Sakina with MTN Mobile Money, Airtel Money and Visa is being set up. Until then, give your Zakat through your local mosque or a trusted Zakat organisation.</div>`}
@@ -1193,7 +1194,7 @@
 
       <h2>About</h2>
       <div class="card small">
-        <p style="margin-top:0"><b>Sakina</b> 0.10.0 · works offline, except Quran recitation.</p>
+        <p style="margin-top:0"><b>Sakina</b> 0.10.1 · works offline, except Quran recitation.</p>
         <p>Developed by <b>Hajj Abdul Hakim</b>.</p>
         <p>Arabic texts are from the Qur'an and the hadith collections named on each dua. Transliterations and English meanings are written for Sakina and are approximate; please check with a teacher you trust, and report any mistake.</p>
         <p>Quran: Tanzil Uthmani text (tanzil.net, CC BY 3.0, used unchanged), English by M. H. Shakir and transliteration via tanzil.net. Recitations stream from everyayah.com. Quran font: Amiri Quran (SIL OFL).</p>
