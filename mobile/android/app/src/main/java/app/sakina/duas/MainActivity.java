@@ -7,7 +7,7 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(QuranPlaybackPlugin.class);
-        registerPlugin(CompassPlugin.class);
+        registerPlugin(CompassPlugin.class); registerPlugin(AdhkarPlugin.class);
         super.onCreate(savedInstanceState);
     }
 }

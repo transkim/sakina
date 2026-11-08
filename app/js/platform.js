@@ -31,6 +31,8 @@
       return null;
     },
     installPrompt: null,
+    // Android: native alarm + player so the adhkar start by themselves even when Sakina is closed.
+    adhkar: isNative && platform === 'android' && P.Adhkar ? P.Adhkar : null,
 
     tap() {
       try {

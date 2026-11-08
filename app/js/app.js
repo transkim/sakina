@@ -181,6 +181,11 @@
       daily = { id: 1, hour, minute, title: 'A dua for today', body: `${d.title}: ${d.en}`.slice(0, 180) };
     }
     const dailies = daily ? [daily] : [];
+    if (Platform.adhkar) {
+      await Platform.schedule(items, dailies);
+      await scheduleNativeAdhkar();
+      return;
+    }
     for (const a of ADHKAR_AUTO) {
       if (!settings[a.on]) continue;
       const [hour, minute] = settings[a.time].split(':').map(Number);
@@ -189,6 +194,42 @@
     }
     await Platform.schedule(items, dailies);
     armAdhkar();
+  }
+
+  // Android: hand the playlist to the native player, which an alarm starts at the set time (app open or closed).
+  const blobB64 = (blob) => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1] || ''); r.onerror = rej; r.readAsDataURL(blob); });
+  async function nativeItems(cat) {
+    const out = [];
+    for (const d of duas.filter((x) => x.cat === cat)) {
+      const times = settings.playAllRepeat !== false ? (d.repeat || 1) : 1;
+      const clip = await MyAudio.getClip(d.id).catch(() => null);
+      if (clip) {
+        const f = await MyAudio.getFile(clip.file).catch(() => null);
+        if (f && f.blob) {
+          const ext = (/\.(\w+)$/.exec(f.name || '') || [, (f.type || '').includes('mp4') ? 'm4a' : (f.type || '').includes('ogg') ? 'ogg' : (f.type || '').includes('webm') ? 'webm' : 'mp3'])[1];
+          const name = `${clip.file}.${ext}`;
+          try {
+            let r = await Platform.adhkar.hasClip({ name });
+            if (!r.exists) r = await Platform.adhkar.saveClip({ name, data: await blobB64(f.blob) });
+            out.push({ path: r.path, start: clip.start || 0, end: clip.end == null ? null : clip.end, repeat: times, title: d.title });
+            continue;
+          } catch (_) { /* fall back to the built-in recording */ }
+        }
+      }
+      const aid = d.audio || d.id;
+      if (recorded.has(aid)) out.push({ path: `public/audio/duas/${aid}.mp3`, start: 0, end: null, repeat: times, title: d.title });
+    }
+    return out;
+  }
+  async function scheduleNativeAdhkar() {
+    try {
+      const slots = [];
+      for (const a of ADHKAR_AUTO) {
+        const [hour, minute] = settings[a.time].split(':').map(Number);
+        slots.push({ key: a.cat, on: !!settings[a.on], hour, minute, title: a.name, items: settings[a.on] ? await nativeItems(a.cat) : [] });
+      }
+      await Platform.adhkar.schedule({ slots });
+    } catch (e) { console.warn('adhkar schedule failed', e); }
   }
 
   // ---------- morning / evening adhkar that start by themselves ----------
@@ -944,8 +985,9 @@
 
       <h2>Start adhkar automatically</h2>
       <div class="card">
-        ${ADHKAR_AUTO.map((a) => `<div class="field"><label for="${a.on}">${a.name}<div class="muted small">${Platform.web ? 'Starts by itself while Sakina is open on screen' : Platform.mobile ? 'Starts by itself if Sakina is open, otherwise a reminder starts it with one tap' : 'Starts by itself while Sakina is running (it stays in the system tray)'}</div></label><input type="checkbox" class="switch" id="${a.on}" ${settings[a.on] ? 'checked' : ''}></div>
+        ${ADHKAR_AUTO.map((a) => `<div class="field"><label for="${a.on}">${a.name}<div class="muted small">${Platform.adhkar ? 'Plays by itself at this time, even with Sakina closed and the screen off' : Platform.web ? 'Starts by itself while Sakina is open on screen' : Platform.mobile ? 'Starts by itself if Sakina is open, otherwise a reminder starts it with one tap' : 'Starts by itself while Sakina is running (it stays in the system tray)'}</div></label><input type="checkbox" class="switch" id="${a.on}" ${settings[a.on] ? 'checked' : ''}></div>
         <div class="field"><label for="${a.time}">Start time</label><input type="time" id="${a.time}" value="${esc(settings[a.time])}"></div>`).join('')}
+        ${Platform.adhkar ? '<div class="actions" style="margin-top:6px"><button class="btn" id="adhkarTest">▶ Test: play morning adhkar now</button><button class="btn ghost" id="adhkarStop">■ Stop</button></div>' : ''}
       </div>
 
       <h2>Quran recitation</h2>
@@ -975,7 +1017,7 @@
 
       <h2>About</h2>
       <div class="card small">
-        <p style="margin-top:0"><b>Sakina</b> 0.8.1 · works offline, except Quran recitation.</p>
+        <p style="margin-top:0"><b>Sakina</b> 0.9.0 · works offline, except Quran recitation.</p>
         <p>Developed by <b>Hajj Abdul Hakim</b>.</p>
         <p>Arabic texts are from the Qur'an and the hadith collections named on each dua. Transliterations and English meanings are written for Sakina and are approximate; please check with a teacher you trust, and report any mistake.</p>
         <p>Quran: Tanzil Uthmani text (tanzil.net, CC BY 3.0, used unchanged), English by M. H. Shakir and transliteration via tanzil.net. Recitations stream from everyayah.com. Quran font: Amiri Quran (SIL OFL).</p>
@@ -1011,9 +1053,18 @@
     $('palerts').onchange = toggleNotify('prayerAlerts');
     $('daily').onchange = toggleNotify('dailyOn');
     $('dtime').onchange = (e) => { settings.dailyTime = e.target.value || '08:00'; saveSettings(); reschedule(); };
+    if ($('adhkarTest')) {
+      $('adhkarTest').onclick = async () => {
+        if (!settings.amOn) return toast('Turn on Morning Adhkar first');
+        await scheduleNativeAdhkar();
+        Platform.adhkar.playNow({ key: 'morning' }).then(() => toast('Playing. You can lock the phone or close Sakina.')).catch(() => toast('Could not start the player'));
+      };
+      $('adhkarStop').onclick = () => Platform.adhkar.stop();
+    }
     for (const a of ADHKAR_AUTO) {
       $(a.on).onchange = async (e) => {
-        if (e.target.checked && Platform.mobile && !(await Platform.askNotify())) toast('Notifications are blocked, so it can only start while Sakina is open.');
+        if (e.target.checked && Platform.adhkar) await Platform.askNotify(); // to show the Pause / Stop controls
+        else if (e.target.checked && Platform.mobile && !(await Platform.askNotify())) toast('Notifications are blocked, so it can only start while Sakina is open.');
         settings[a.on] = e.target.checked; saveSettings(); reschedule();
         if (e.target.checked) toast(`${a.name} will start at ${settings[a.time]}`);
       };
@@ -1093,6 +1144,7 @@
         if (!old) { await MyAudio.setClip(d.id, fileId, Number(list[0].start) || 0, list[0].end == null ? null : Number(list[0].end)); done++; }
       }
     }
+    if (done) reschedule();
     return { done, skipped };
   }
 
