@@ -368,3 +368,32 @@ body.has-player #toast { bottom: calc(150px + var(--safe-bottom)); }
 .install-steps { margin: 12px 0 2px; padding-left: 22px; line-height: 1.7; }
 .install-steps b { color: var(--gold, #e9c46a); }
 #installHide { padding: 4px 10px; min-height: 0; }
+
+/* home tiles */
+.tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+.tiles .tile { display: flex; gap: 10px; align-items: center; text-decoration: none; color: inherit; margin: 0; padding: 14px; }
+.tiles .tile > span { font-size: 24px; }
+.tiles .tile b { font-weight: 600; }
+
+/* fasting calendar */
+.fgrid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.fw { text-align: center; font-size: 11px; opacity: .7; padding-bottom: 2px; }
+.fd { position: relative; aspect-ratio: 1 / 1.05; border: 1px solid transparent; border-radius: 10px; background: var(--surface-2); color: var(--text); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; padding: 2px; cursor: pointer; font: inherit; }
+.fd.empty { background: none; cursor: default; }
+.fd b { font-weight: 600; font-size: 14px; line-height: 1; }
+.fd small { font-size: 9.5px; opacity: .65; line-height: 1; }
+.fd i { display: flex; gap: 2px; height: 5px; margin-top: 2px; }
+.fd i span { width: 5px; height: 5px; border-radius: 50%; }
+.fd.today { border-color: var(--gold, #e9c46a); box-shadow: 0 0 0 1px var(--gold, #e9c46a) inset; }
+.fd.f-ramadan { background: color-mix(in srgb, #e9c46a 30%, var(--surface-2)); }
+.fd.f-forbidden { background: color-mix(in srgb, #ef4444 25%, var(--surface-2)); }
+.fd.f-arafah, .fd.f-ashura { background: color-mix(in srgb, #f97316 25%, var(--surface-2)); }
+.fdot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; flex: none; vertical-align: 0; }
+.rtable { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 13px; }
+.rtable th, .rtable td { text-align: left; padding: 6px 4px; border-bottom: 1px solid var(--line); }
+.rtable tr.now td { color: var(--gold, #e9c46a); font-weight: 600; }
+
+/* zakat */
+.zres .zdue { color: var(--gold, #e9c46a); font-size: 20px; }
+.paybtns { display: grid; gap: 8px; }
+.btn.pay { justify-content: center; font-weight: 600; padding: 12px; }

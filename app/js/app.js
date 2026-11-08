@@ -297,6 +297,11 @@
       ${(() => { const lr = Q.lastRead(); return lr ? `<a class="card" href="#/surah/${lr.s}?a=${lr.a}" style="display:flex;align-items:center;gap:12px;text-decoration:none;color:inherit">
         <span style="font-size:26px">📖</span><div style="flex:1"><div class="muted small">Continue reading</div><div style="font-weight:600">${esc(Q.surahs[lr.s - 1].tr)} · ayah ${lr.a}</div></div><span class="muted">›</span></a>` : ''; })()}
 
+      <div class="tiles">
+        <a class="card tile" href="#/fasting"><span>🌙</span><div><b>Fasting calendar</b><div class="muted small">${(() => { const f = fastsOn(localDate()); return esc(f.list.length ? (f.list[0] === 'forbidden' ? f.label : 'Today: ' + FAST[f.list[0]].name) : 'Sunnah and Ramadan'); })()}</div></div></a>
+        <a class="card tile" href="#/zakat"><span>🤲</span><div><b>Zakat</b><div class="muted small">Calculate and give</div></div></a>
+      </div>
+
       <h2>Dua of the day</h2>
       <a class="card" href="#/dua/${d.id}" style="display:block;text-decoration:none;color:inherit">
         <div class="muted small">${esc(catById[d.cat].name)}</div>
@@ -436,6 +441,177 @@
       if (auto) { history.replaceState(null, '', `#/cat/${id}`); document.getElementById('playAll').click(); }
     })();
     cleanup = () => { alive = false; stop(); };
+  };
+
+  // ---------- fasting calendar (Sunnah and Ramadan) ----------
+  const hijriOf = (d) => { const x = new Date(d); x.setDate(x.getDate() + Number(settings.hijriAdj || 0)); return hijriParts(x); };
+  const FAST = {
+    ramadan: { name: 'Ramadan', color: '#e9c46a', note: 'Obligatory fast for every adult, healthy Muslim.' },
+    arafah: { name: 'Day of Arafah', color: '#f97316', note: 'Expiates the sins of the previous and the coming year (Muslim). For those not on Hajj.' },
+    ashura: { name: "'Ashura", color: '#f472b6', note: "10 Muharram: expiates the previous year (Muslim). Fast the 9th with it too." },
+    tasua: { name: "Tasu'a", color: '#f472b6', note: "9 Muharram, fasted together with 'Ashura." },
+    dhulhijjah: { name: 'First days of Dhu al-Hijjah', color: '#fb923c', note: 'The best days of the year for good deeds (Bukhari).' },
+    shawwal: { name: 'Six days of Shawwal', color: '#a78bfa', note: 'With Ramadan it is like fasting the whole year (Muslim). Any 6 days after Eid.' },
+    white: { name: 'White days (Ayyam al-Bid)', color: '#e5e7eb', note: '13th, 14th and 15th of every Hijri month (Nasa\'i, Tirmidhi).' },
+    monthu: { name: 'Monday or Thursday', color: '#6ee7b7', note: 'Deeds are presented to Allah on these days (Tirmidhi).' },
+    forbidden: { name: 'Do not fast', color: '#ef4444', note: 'The two Eids and the days of Tashreeq (11 to 13 Dhu al-Hijjah).' },
+  };
+  function fastsOn(d) {
+    const h = hijriOf(d), dow = d.getDay(), out = [];
+    if ((h.m === 10 && h.d === 1) || (h.m === 12 && h.d >= 10 && h.d <= 13)) return { h, list: ['forbidden'], label: h.m === 10 ? 'Eid al-Fitr' : h.d === 10 ? 'Eid al-Adha' : 'Day of Tashreeq' };
+    if (h.m === 9) out.push('ramadan');
+    else {
+      if (h.m === 12 && h.d === 9) out.push('arafah');
+      if (h.m === 12 && h.d < 9) out.push('dhulhijjah');
+      if (h.m === 1 && h.d === 10) out.push('ashura');
+      if (h.m === 1 && h.d === 9) out.push('tasua');
+      if (h.m === 10 && h.d >= 2) out.push('shawwal');
+      if (h.d >= 13 && h.d <= 15) out.push('white');
+      if (dow === 1 || dow === 4) out.push('monthu');
+    }
+    return { h, list: out, label: out.length ? FAST[out[0]].name : '' };
+  }
+  // first and last day of the next (or current) Ramadan, searching day by day
+  function nextRamadan(from) {
+    const day = (i) => { const d = new Date(from); d.setDate(d.getDate() + i); return d; };
+    for (let i = -30; i < 400; i++) {
+      if (hijriOf(day(i)).m !== 9 || hijriOf(day(i - 1)).m === 9) continue;
+      let j = i; while (hijriOf(day(j + 1)).m === 9) j++;
+      if (j >= 0) return { start: day(i), end: day(j), year: hijriOf(day(i)).y };
+      i = j;
+    }
+    return null;
+  }
+
+  views.fasting = (params) => {
+    const today = localDate();
+    const ym = /^(\d{4})-(\d{1,2})$/.exec(params.get('m') || '');
+    const y = ym ? +ym[1] : today.getFullYear(), m = ym ? +ym[2] - 1 : today.getMonth();
+    const first = new Date(y, m, 1, 12), days = new Date(y, m + 1, 0).getDate();
+    const prev = new Date(y, m - 1, 1), next = new Date(y, m + 1, 1);
+    const key = (d) => `${d.getFullYear()}-${d.getMonth() + 1}`;
+    const hFirst = hijriOf(first), hLast = hijriOf(new Date(y, m, days, 12));
+    const hTitle = hFirst.m === hLast.m ? `${HIJRI_MONTHS[hFirst.m - 1]} ${hFirst.y}` : `${HIJRI_MONTHS[hFirst.m - 1]} – ${HIJRI_MONTHS[hLast.m - 1]} ${hLast.y} AH`;
+    const startDow = (first.getDay() + 6) % 7; // weeks start on Monday
+    let cells = '';
+    for (let i = 0; i < startDow; i++) cells += '<div class="fd empty"></div>';
+    for (let n = 1; n <= days; n++) {
+      const d = new Date(y, m, n, 12), f = fastsOn(d);
+      const isToday = d.toDateString() === today.toDateString();
+      const main = f.list[0];
+      cells += `<button class="fd ${main ? 'f-' + main : ''} ${isToday ? 'today' : ''}" data-d="${n}" title="${esc(f.label)}">
+        <b>${n}</b><small>${f.h.d}</small>${f.list.length ? `<i>${f.list.slice(0, 3).map((k) => `<span style="background:${FAST[k].color}"></span>`).join('')}</i>` : ''}</button>`;
+    }
+    // upcoming special fasts (Mondays and Thursdays left out of the list, they are on the calendar)
+    const up = [];
+    for (let i = 0, last = ''; i < 365 && up.length < 12; i++) {
+      const d = localDate(i), f = fastsOn(d), k = f.list.find((x) => x !== 'monthu');
+      if (!k) { last = ''; continue; }
+      const tag = k + (k === 'ramadan' ? '' : f.h.m);
+      if (tag === last) { up[up.length - 1].to = d; continue; }
+      last = tag; up.push({ k, from: d, to: d, label: f.label });
+    }
+    const fmtD = (d) => d.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' });
+    const R = nextRamadan(today);
+    const L = settings.location;
+    $view.innerHTML = `
+      <a class="back" href="#/home">‹ Today</a>
+      <h1>🌙 Fasting calendar</h1>
+      <div class="card">
+        <div class="daybar"><a href="#/fasting?m=${key(prev)}" aria-label="Previous month">‹</a>
+          <div class="d"><b>${first.toLocaleDateString([], { month: 'long', year: 'numeric' })}</b><div class="muted small">${esc(hTitle)}</div></div>
+          <a href="#/fasting?m=${key(next)}" aria-label="Next month">›</a></div>
+        <div class="fgrid">${['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((w) => `<div class="fw">${w}</div>`).join('')}${cells}</div>
+        <div class="muted small" id="fdInfo" style="margin-top:10px">Tap a day to see which fast it is. Small number = Hijri date.</div>
+      </div>
+
+      ${R ? `<h2>Ramadan ${R.year}</h2>
+      <div class="card">
+        <div style="font-weight:600">${fmtD(R.start)} – ${fmtD(R.end)}</div>
+        <div class="muted small">Expected dates. The start and Eid depend on the moon sighting where you live; adjust the Hijri date in Settings if needed.</div>
+        ${L ? `<details style="margin-top:10px"><summary>Suhoor and iftar times in ${esc(L.name)}</summary>
+          <table class="rtable"><thead><tr><th>Day</th><th>Date</th><th>Suhoor ends</th><th>Iftar</th></tr></thead><tbody>
+          ${(() => { const rows = []; for (let d = new Date(R.start), i = 1; d <= R.end; d.setDate(d.getDate() + 1), i++) { const t = Astro.prayerTimes(new Date(d), L.lat, L.lng, { method: settings.method, asr: settings.asr }); rows.push(`<tr class="${d.toDateString() === today.toDateString() ? 'now' : ''}"><td>${i}</td><td>${fmtD(d)}</td><td>${fmtTime(t.fajr)}</td><td>${fmtTime(t.maghrib)}</td></tr>`); } return rows.join(''); })()}
+          </tbody></table></details>` : '<div class="muted small" style="margin-top:8px"><a href="#/settings">Set your location</a> to see suhoor and iftar times for every day.</div>'}
+      </div>` : ''}
+
+      <h2>Coming up</h2>
+      <div class="list">${up.map((u) => `<div class="item" style="display:flex;gap:12px;align-items:center"><span class="fdot" style="background:${FAST[u.k].color}"></span>
+        <div style="flex:1"><div style="font-weight:600">${esc(u.label)}</div><div class="muted small">${fmtD(u.from)}${u.to > u.from ? ' – ' + fmtD(u.to) : ''}</div></div></div>`).join('') || '<div class="empty">Nothing special in the next months.</div>'}</div>
+
+      <h2>Sunnah fasts</h2>
+      <div class="card">${Object.entries(FAST).map(([k, f]) => `<div class="field"><label><span class="fdot" style="background:${f.color}"></span> <b>${f.name}</b><div class="muted small">${esc(f.note)}</div></label></div>`).join('')}
+        <div class="muted small" style="margin-top:8px">Also loved: fasting much of Sha'ban and Muharram, and every other day (the fast of Dawud). Don't single out a Friday or Saturday alone.</div></div>`;
+    $view.querySelectorAll('.fd[data-d]').forEach((b) => b.onclick = () => {
+      const d = new Date(y, m, +b.dataset.d, 12), f = fastsOn(d);
+      document.getElementById('fdInfo').innerHTML = `<b>${d.toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long' })}</b> · ${f.h.d} ${HIJRI_MONTHS[f.h.m - 1]} ${f.h.y}<br>${f.list.length ? f.list.map((k) => `<span class="fdot" style="background:${FAST[k].color}"></span> ${k === 'forbidden' ? esc(f.label) + ': do not fast' : FAST[k].name}`).join('<br>') : 'No special fast on this day.'}`;
+    });
+  };
+
+  // ---------- Zakat calculator and giving ----------
+  views.zakat = () => {
+    const G = window.SakinaGiving || {};
+    const z = Object.assign({ cur: 'UGX', basis: 'silver', goldPrice: '', silverPrice: '', cash: '', momo: '', gold: '', silver: '', stock: '', owed: '', debts: '', people: '', fitr: '' }, store.get('zakat', {}));
+    const num = (v) => Number(String(v).replace(/[^\d.]/g, '')) || 0;
+    const money = (v) => `${z.cur} ${Math.round(v).toLocaleString()}`;
+    const inp = (id, label, hint = '', type = 'text') => `<div class="field"><label for="z_${id}">${label}${hint ? `<div class="muted small">${hint}</div>` : ''}</label><input type="${type}" inputmode="decimal" id="z_${id}" value="${esc(z[id])}" placeholder="0"></div>`;
+    const links = G.links || {};
+    const pay = [['mtn', 'MTN Mobile Money', '#ffcb05', '#1a1a1a'], ['airtel', 'Airtel Money', '#e40000', '#fff'], ['card', 'Visa / Mastercard', '#1a1f71', '#fff']].filter(([k]) => links[k]);
+    $view.innerHTML = `
+      <a class="back" href="#/home">‹ Today</a>
+      <h1>🤲 Zakat</h1>
+      <div class="card">
+        <div class="muted small">Zakat is 2.5% of the wealth you have held for a full Hijri year, once it is above the nisab. Add what you own today.</div>
+        <div class="field"><label for="z_cur">Currency</label><select id="z_cur">${['UGX', 'KES', 'TZS', 'RWF', 'USD'].map((c) => `<option ${z.cur === c ? 'selected' : ''}>${c}</option>`).join('')}</select></div>
+        ${inp('cash', 'Cash at home and in the bank')}
+        ${inp('momo', 'Mobile money balances', 'MTN, Airtel and others')}
+        ${inp('gold', 'Gold you own (grams)', 'Jewellery kept as savings counts')}
+        ${inp('silver', 'Silver you own (grams)')}
+        ${inp('stock', 'Business goods for sale', 'At today\'s selling value')}
+        ${inp('owed', 'Money others owe you', 'That you expect to get back')}
+        ${inp('debts', 'Debts you must pay now', 'Subtracted')}
+      </div>
+      <h2>Nisab</h2>
+      <div class="card">
+        ${inp('goldPrice', 'Gold price per gram', 'Ask a local dealer or check the news')}
+        ${inp('silverPrice', 'Silver price per gram')}
+        <div class="field"><label for="z_basis">Measure the nisab by<div class="muted small">Silver gives a lower nisab, so more people pay; many scholars prefer it as it helps the poor more</div></label><select id="z_basis"><option value="silver" ${z.basis === 'silver' ? 'selected' : ''}>Silver (595 g)</option><option value="gold" ${z.basis === 'gold' ? 'selected' : ''}>Gold (85 g)</option></select></div>
+      </div>
+      <div class="card zres" id="zres"></div>
+
+      <h2>Zakat al-Fitr</h2>
+      <div class="card">
+        <div class="muted small">Paid before the Eid prayer for every member of the household: one sa' (about 2.5 to 3 kg) of the local staple food, or its value.</div>
+        ${inp('people', 'People in your household', '', 'number')}
+        ${inp('fitr', 'Value of one sa\' of food per person', 'Ask your local mosque for this year\'s amount')}
+        <div style="margin-top:8px;font-weight:600" id="zfitr"></div>
+      </div>
+
+      <h2>Give your Zakat</h2>
+      <div class="card">
+        ${G.enabled && pay.length ? `
+          <div style="font-weight:600">${esc(G.org)}</div>
+          ${G.about ? `<div class="muted small" style="margin:4px 0 10px">${esc(G.about)}</div>` : ''}
+          <div class="paybtns">${pay.map(([k, name, bg, fg]) => `<a class="btn pay" href="${esc(links[k])}" target="_blank" rel="noopener" style="background:${bg};color:${fg};border-color:${bg}">${name}</a>`).join('')}</div>
+          <div class="muted small" style="margin-top:10px">Payment happens on the provider's secure page; Sakina never sees your PIN or card. ${G.contact ? `Questions or a receipt: ${esc(G.contact)}.` : ''} ${G.report ? `<a href="${esc(G.report)}" target="_blank" rel="noopener">See what was collected and given out</a>.` : ''}</div>`
+        : `<div class="muted">Giving through Sakina with MTN Mobile Money, Airtel Money and Visa is being set up. Until then, give your Zakat through your local mosque or a trusted Zakat organisation.</div>`}
+      </div>`;
+    const calc = () => {
+      for (const k of Object.keys(z)) { const el = document.getElementById('z_' + k); if (el) z[k] = el.value; }
+      store.set('zakat', z);
+      const wealth = num(z.cash) + num(z.momo) + num(z.gold) * num(z.goldPrice) + num(z.silver) * num(z.silverPrice) + num(z.stock) + num(z.owed) - num(z.debts);
+      const nisab = z.basis === 'gold' ? 85 * num(z.goldPrice) : 595 * num(z.silverPrice);
+      const due = nisab > 0 && wealth >= nisab ? wealth * 0.025 : 0;
+      document.getElementById('zres').innerHTML = !nisab
+        ? `<div class="muted">Enter the ${z.basis} price per gram to work out the nisab.</div><div style="margin-top:6px">Your zakatable wealth: <b>${money(Math.max(0, wealth))}</b></div>`
+        : `<div class="muted small">Your zakatable wealth</div><div style="font-size:20px;font-weight:600">${money(Math.max(0, wealth))}</div>
+           <div class="muted small" style="margin-top:6px">Nisab (${z.basis === 'gold' ? '85 g gold' : '595 g silver'}): ${money(nisab)}</div>
+           <div style="margin-top:10px">${due ? `Zakat due: <b class="zdue">${money(due)}</b>` : 'Below the nisab, so no Zakat is due. Sadaqah is always welcome.'}</div>`;
+      const ppl = num(z.people), per = num(z.fitr);
+      document.getElementById('zfitr').textContent = ppl && per ? `Zakat al-Fitr: ${money(ppl * per)} (${ppl} × ${money(per)})` : '';
+    };
+    $view.querySelectorAll('input, select').forEach((el) => { el.oninput = calc; el.onchange = calc; });
+    calc();
   };
 
   views.fav = () => {
@@ -1017,7 +1193,7 @@
 
       <h2>About</h2>
       <div class="card small">
-        <p style="margin-top:0"><b>Sakina</b> 0.9.0 · works offline, except Quran recitation.</p>
+        <p style="margin-top:0"><b>Sakina</b> 0.10.0 · works offline, except Quran recitation.</p>
         <p>Developed by <b>Hajj Abdul Hakim</b>.</p>
         <p>Arabic texts are from the Qur'an and the hadith collections named on each dua. Transliterations and English meanings are written for Sakina and are approximate; please check with a teacher you trust, and report any mistake.</p>
         <p>Quran: Tanzil Uthmani text (tanzil.net, CC BY 3.0, used unchanged), English by M. H. Shakir and transliteration via tanzil.net. Recitations stream from everyayah.com. Quran font: Amiri Quran (SIL OFL).</p>
@@ -1155,7 +1331,7 @@
   });
 
   // ---------- routing ----------
-  const TAB_OF = { quran: 'quran', surah: 'quran', home: 'home', duas: 'duas', cat: 'duas', fav: 'duas', dua: 'duas', tasbih: 'tasbih', prayer: 'prayer', settings: 'settings' };
+  const TAB_OF = { fasting: 'home', zakat: 'home', quran: 'quran', surah: 'quran', home: 'home', duas: 'duas', cat: 'duas', fav: 'duas', dua: 'duas', tasbih: 'tasbih', prayer: 'prayer', settings: 'settings' };
   function go(h) { location.hash = h; }
   function route() {
     if (cleanup) { cleanup(); cleanup = null; }
