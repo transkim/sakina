@@ -36,6 +36,7 @@ jobs:
         with:
           name: Sakina-Windows-installer
           path: dist/*.exe
+          retention-days: 3
 
   android:
     needs: test
@@ -75,6 +76,7 @@ jobs:
         with:
           name: Sakina-Android-apk
           path: mobile/Sakina-debug.apk
+          retention-days: 3
 
   ios:
     needs: test
@@ -114,3 +116,4 @@ jobs:
         with:
           name: Sakina-iPhone-ipa-unsigned
           path: mobile/Sakina-unsigned.ipa
+          retention-days: 3
