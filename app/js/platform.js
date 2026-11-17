@@ -31,6 +31,89 @@
       return null;
     },
     installPrompt: null,
+    /**
+     * Offline Quran recitation store, or null when this version cannot save audio.
+     * list(reciter) -> { dir, files: [names], bytes }; download(reciter, items[{name,url,alt}], onProgress) -> { done, failed, cancelled };
+     * cancel(); remove(reciter, names|null); localUrl(dir, reciter, name) -> URL the <audio> element can play.
+     */
+    audioStore: (() => {
+      if (isNative && P.QuranAudio) {
+        const Q = P.QuranAudio;
+        return {
+          kind: 'native',
+          list: (reciter) => Q.list({ reciter }),
+          async download(reciter, items, onProgress) {
+            let h = null;
+            try { h = await Promise.resolve(Q.addListener('progress', (p) => { if (p.reciter === reciter && onProgress) onProgress(p); })); } catch (_) {}
+            try { return await Q.download({ reciter, items }); } finally { try { if (h) h.remove(); } catch (_) {} }
+          },
+          cancel: () => Q.cancel(),
+          remove: (reciter, names) => Q.remove(names ? { reciter, names } : { reciter }),
+          localUrl: (dir, reciter, name) => cap.convertFileSrc(`${dir}/${reciter}/${name}`),
+        };
+      }
+      if (isDesktop && root.sakinaDesktop.quranAudio) {
+        const D = root.sakinaDesktop.quranAudio;
+        return {
+          kind: 'desktop',
+          list: (reciter) => D.list(reciter),
+          async download(reciter, items, onProgress) {
+            const off = D.onProgress((p) => { if (p.reciter === reciter && onProgress) onProgress(p); });
+            try { return await D.download(reciter, items); } finally { off(); }
+          },
+          cancel: () => D.cancel(),
+          remove: (reciter, names) => D.remove(reciter, names || null),
+          localUrl: (dir, reciter, name) => 'file:///' + `${dir}/${reciter}/${name}`.replace(/\\/g, '/').replace(/^\/+/, '').split('/').map(encodeURIComponent).join('/').replace(/^([A-Za-z])%3A/, '$1:'),
+        };
+      }
+      // Web version: the browser's Cache Storage, served by the service worker at the same address (needs the site to allow it)
+      if (!isNative && !isDesktop && root.caches && root.isSecureContext) {
+        const NAME = 'sakina-quran-audio';
+        const prefix = (reciter) => `/data/${reciter}/`;
+        let stop = false;
+        return {
+          kind: 'web',
+          async list(reciter) {
+            const c = await caches.open(NAME);
+            const files = (await c.keys()).map((r) => new URL(r.url)).filter((u) => u.pathname.startsWith(prefix(reciter))).map((u) => u.pathname.split('/').pop());
+            return { dir: '', files, bytes: 0 };
+          },
+          async download(reciter, items, onProgress) {
+            const c = await caches.open(NAME);
+            stop = false;
+            let done = 0, failed = 0, i = 0, blocked = 0;
+            const worker = async () => {
+              while (i < items.length && !stop) {
+                const it = items[i++];
+                let ok = !!(await c.match(it.url));
+                if (!ok) {
+                  try {
+                    const res = await fetch(it.url, { mode: 'cors' });
+                    if (res.ok) { await c.put(it.url, res); ok = true; }
+                  } catch (_) { blocked++; }
+                }
+                done++; if (!ok) failed++;
+                if (onProgress) onProgress({ reciter, done, total: items.length, failed });
+                if (blocked >= 3 && done === blocked) { stop = true; const e = new Error('blocked'); e.code = 'blocked'; throw e; }
+              }
+            };
+            await Promise.all([worker(), worker(), worker(), worker()]);
+            return { done, failed, cancelled: stop };
+          },
+          async cancel() { stop = true; },
+          async remove(reciter, names) {
+            const c = await caches.open(NAME);
+            for (const r of await c.keys()) {
+              const u = new URL(r.url);
+              if (u.pathname.startsWith(prefix(reciter)) && (!names || names.includes(u.pathname.split('/').pop()))) await c.delete(r);
+            }
+          },
+          localUrl: null, // the service worker answers the normal address from the cache
+        };
+      }
+      return null;
+    })(),
+
     // Android: native alarm + player so the adhkar start by themselves even when Sakina is closed.
     adhkar: isNative && platform === 'android' && P.Adhkar ? P.Adhkar : null,
 

@@ -1169,7 +1169,8 @@
 
       <h2>Quran recitation</h2>
       <div class="card">
-        <div class="field"><label for="reciter">Reciter<div class="muted small">Streams over the internet</div></label><select id="reciter">${Q.RECITERS.map((r) => `<option value="${r.id}" ${settings.reciter === r.id ? 'selected' : ''}>${esc(r.name)}</option>`).join('')}</select></div>
+        <div class="field"><label for="reciter">Reciter<div class="muted small">${Q.offline ? 'Streams over the internet, or plays saved surahs offline' : 'Streams over the internet'}</div></label><select id="reciter">${Q.RECITERS.map((r) => `<option value="${r.id}" ${settings.reciter === r.id ? 'selected' : ''}>${esc(r.name)}</option>`).join('')}</select></div>
+        ${Q.offline ? `<div class="field" id="offField"><label>Offline recitation<div class="muted small" id="offInfo">Checking…</div></label><span class="actions" style="margin:0;flex-wrap:nowrap"><button class="btn" id="offAll">⬇ Save all</button><button class="btn ghost" id="offDel" title="Delete saved recitation">🗑</button></span></div>` : ''}
         <div class="field"><label>Highlight colour<div class="muted small">For the ayah being recited</div></label><span class="hlswatches">${Object.entries(HL_COLORS).map(([k, c]) => `<button class="hlswatch ${settings.hlColor === k ? 'on' : ''}" data-hl="${k}" title="${c[0]}" aria-label="${c[0]}" style="background:${c[1]}"></button>`).join('')}</span></div>
         <div class="field"><label for="follow">Scroll to the ayah being recited</label><input type="checkbox" class="switch" id="follow" ${settings.followAudio !== false ? 'checked' : ''}></div>
         <div class="field"><label for="autonext">Continue to the next surah</label><input type="checkbox" class="switch" id="autonext" ${settings.autoNextSurah ? 'checked' : ''}></div>
@@ -1194,7 +1195,7 @@
 
       <h2>About</h2>
       <div class="card small">
-        <p style="margin-top:0"><b>Sakina</b> 0.10.1 · works offline, except Quran recitation.</p>
+        <p style="margin-top:0"><b>Sakina</b> 0.11.0 · works offline, except Quran recitation.</p>
         <p>Developed by <b>Hajj Abdul Hakim</b>.</p>
         <p>Arabic texts are from the Qur'an and the hadith collections named on each dua. Transliterations and English meanings are written for Sakina and are approximate; please check with a teacher you trust, and report any mistake.</p>
         <p>Quran: Tanzil Uthmani text (tanzil.net, CC BY 3.0, used unchanged), English by M. H. Shakir and transliteration via tanzil.net. Recitations stream from everyayah.com. Quran font: Amiri Quran (SIL OFL).</p>
@@ -1247,7 +1248,36 @@
       };
       $(a.time).onchange = (e) => { settings[a.time] = e.target.value || DEFAULTS[a.time]; saveSettings(); reschedule(); };
     }
-    $('reciter').onchange = (e) => { settings.reciter = e.target.value; saveSettings(); };
+    $('reciter').onchange = (e) => { settings.reciter = e.target.value; saveSettings(); if (Q.offline) drawOffline(); };
+    // offline recitation: whole Quran for the chosen reciter
+    const drawOffline = async () => {
+      const info = $('offInfo'); if (!info) return;
+      const j = Q.offline.job();
+      if (j) { info.textContent = `Saving ${j.label}: ${j.done} of ${j.total} ayahs (${Math.round((j.done / j.total) * 100)}%)`; $('offAll').textContent = '■ Stop'; return; }
+      const sm = await Q.offline.summary();
+      if (!$('offInfo')) return;
+      $('offInfo').textContent = sm.count ? `${sm.count} of 114 surahs saved for this reciter${sm.bytes ? ` (${Q.offline.fmtMB(sm.bytes)})` : ''}. Tap ⬇ on any surah to save just that one.` : 'Nothing saved yet. Save the whole Quran here (about 1 GB, use Wi-Fi), or tap ⬇ on any surah.';
+      $('offAll').textContent = sm.count === 114 ? '✓ All saved' : sm.count ? '⬇ Save the rest' : '⬇ Save all';
+      $('offDel').hidden = !sm.count;
+    };
+    if (Q.offline) {
+      const off = Q.offline.onChange(drawOffline);
+      const prevCleanup = cleanup; cleanup = () => { off(); if (prevCleanup) prevCleanup(); };
+      drawOffline();
+      $('offAll').onclick = async () => {
+        if (Q.offline.job()) { Q.offline.cancel(); return; }
+        if (!confirm('Save the whole Quran for this reciter on this device? It is about 1 GB, so use Wi-Fi. You can keep using Sakina while it downloads.')) return;
+        try {
+          const r = await Q.offline.saveAll();
+          toast(r.cancelled ? 'Download stopped. Tap again to continue later.' : r.failed ? `Done, but ${r.failed} ayahs failed. Tap again to retry them.` : 'The whole Quran is saved. Recitation now works without internet.');
+        } catch (e) { toast(e.code === 'blocked' ? 'Saving recitation is not possible in the web version. Use the Android, iPhone or Windows app.' : (e.message || 'Could not save')); }
+        drawOffline();
+      };
+      $('offDel').onclick = async () => {
+        if (!confirm('Delete all saved recitation for this reciter from this device?')) return;
+        await Q.offline.removeAll(); toast('Saved recitation deleted'); drawOffline();
+      };
+    }
     $('follow').onchange = (e) => { settings.followAudio = e.target.checked; saveSettings(); };
     $view.querySelectorAll('.hlswatch').forEach((b) => b.onclick = () => {
       settings.hlColor = b.dataset.hl; saveSettings(); applyTheme();
@@ -1328,7 +1358,7 @@
   // ---------- Quran ----------
   const Q = window.SakinaQuranUI.install({
     views, store, settings, saveSettings, esc, toast, Platform,
-    setCleanup: (f) => { cleanup = f; },
+    setCleanup: (f) => { const prev = cleanup; cleanup = prev ? () => { prev(); f(); } : f; },
   });
 
   // ---------- routing ----------

@@ -1,5 +1,6 @@
-const { app, BrowserWindow, Tray, Menu, shell, nativeImage } = require('electron');
+const { app, BrowserWindow, Tray, Menu, shell, nativeImage, ipcMain, net } = require('electron');
 const path = require('path');
+const fs = require('fs');
 
 const APP_DIR = path.join(__dirname, '..', 'app');
 let win = null;
@@ -71,6 +72,64 @@ function createTray() {
   ]));
   tray.on('click', showWindow);
 }
+
+// ---------- offline Quran recitation: files saved under the user's app data folder ----------
+const quranRoot = () => path.join(app.getPath('userData'), 'quran');
+const safeName = (s) => typeof s === 'string' && s.length > 0 && !s.includes('/') && !s.includes('\\') && !s.includes('..');
+let quranCancel = false;
+ipcMain.handle('quran:list', (e, reciter) => {
+  const out = { dir: quranRoot(), files: [], bytes: 0 };
+  if (!safeName(reciter)) return out;
+  const dir = path.join(quranRoot(), reciter);
+  for (const n of fs.existsSync(dir) ? fs.readdirSync(dir) : []) {
+    if (!n.endsWith('.mp3')) continue;
+    const size = fs.statSync(path.join(dir, n)).size;
+    if (size > 0) { out.files.push(n); out.bytes += size; }
+  }
+  return out;
+});
+async function quranFetch(url, file) {
+  if (typeof url !== 'string' || !url.startsWith('https://')) return false;
+  try {
+    const res = await net.fetch(url);
+    if (!res.ok) return false;
+    const buf = Buffer.from(await res.arrayBuffer());
+    if (!buf.length) return false;
+    fs.writeFileSync(file + '.part', buf);
+    fs.renameSync(file + '.part', file);
+    return true;
+  } catch (_) { return false; }
+}
+ipcMain.handle('quran:download', async (e, reciter, items) => {
+  if (!safeName(reciter) || !Array.isArray(items)) throw new Error('bad request');
+  const dir = path.join(quranRoot(), reciter);
+  fs.mkdirSync(dir, { recursive: true });
+  quranCancel = false;
+  let done = 0, failed = 0, i = 0;
+  const worker = async () => {
+    while (i < items.length && !quranCancel) {
+      const it = items[i++];
+      let ok = false;
+      if (it && safeName(it.name)) {
+        const file = path.join(dir, it.name);
+        ok = fs.existsSync(file) && fs.statSync(file).size > 0;
+        if (!ok) ok = await quranFetch(it.url, file);
+        if (!ok && it.alt) ok = await quranFetch(it.alt, file);
+      }
+      done++; if (!ok) failed++;
+      if (!e.sender.isDestroyed()) e.sender.send('quran:progress', { reciter, done, total: items.length, failed });
+    }
+  };
+  await Promise.all([worker(), worker(), worker(), worker()]);
+  return { done, failed, cancelled: quranCancel };
+});
+ipcMain.handle('quran:cancel', () => { quranCancel = true; });
+ipcMain.handle('quran:remove', (e, reciter, names) => {
+  if (!safeName(reciter)) return;
+  const dir = path.join(quranRoot(), reciter);
+  if (Array.isArray(names)) { for (const n of names) if (safeName(n)) fs.rmSync(path.join(dir, n), { force: true }); }
+  else fs.rmSync(dir, { recursive: true, force: true });
+});
 
 app.whenReady().then(() => {
   createWindow();

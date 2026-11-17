@@ -60,9 +60,71 @@
     audio.preload = 'auto';
     const prefetch = new Audio();
     prefetch.preload = 'auto';
+    // ---------------- offline recitation (saved on this device) ----------------
+    const OFF = { store: Platform.audioStore, dir: '', files: {}, bytes: {}, job: null, listeners: new Set() };
+    async function loadSaved(rid = reciter().id) {
+      if (!OFF.store) return new Set();
+      try { const r = await OFF.store.list(rid); OFF.dir = r.dir || OFF.dir; OFF.files[rid] = new Set(r.files || []); OFF.bytes[rid] = r.bytes || 0; }
+      catch (_) { OFF.files[rid] = OFF.files[rid] || new Set(); }
+      return OFF.files[rid];
+    }
+    const surahNames = (n) => {
+      const out = []; for (let a = 1; a <= SURAHS[n - 1].ayahs; a++) out.push(`${pad(n)}${pad(a)}.mp3`);
+      if (n !== 1 && n !== 9) out.push('001001.mp3'); // the basmala recited before the surah
+      return out;
+    };
+    const surahSaved = (n, rid = reciter().id) => { const f = OFF.files[rid]; return !!f && surahNames(n).every((x) => f.has(x)); };
+    const savedCount = (rid = reciter().id) => SURAHS.filter((m) => surahSaved(m.n, rid)).length;
+    const emit = () => OFF.listeners.forEach((f) => { try { f(OFF.job); } catch (_) {} });
+    // download a list of surahs for the current reciter; one job at a time
+    async function saveSurahs(list, label) {
+      if (!OFF.store) throw new Error('This version of Sakina cannot save recitation.');
+      if (OFF.job) throw new Error('A download is already running.');
+      const rec = reciter(), rid = rec.id;
+      await loadSaved(rid);
+      const have = OFF.files[rid];
+      const items = [];
+      const seen = new Set();
+      for (const n of list) for (const name of surahNames(n)) {
+        if (have.has(name) || seen.has(name)) continue;
+        seen.add(name);
+        const sNum = Number(name.slice(0, 3)), aNum = Number(name.slice(3, 6));
+        items.push({ name, url: remoteUrl(sNum, aNum, rid), alt: rec.cdn ? `https://cdn.islamic.network/quran/audio/128/${rec.cdn}/${startOf[sNum] + aNum}.mp3` : null });
+      }
+      if (!items.length) return { done: 0, failed: 0 };
+      OFF.job = { rid, label, list, done: 0, total: items.length, failed: 0 };
+      emit();
+      try {
+        const r = await OFF.store.download(rid, items, (p) => { if (OFF.job) { OFF.job.done = p.done; OFF.job.failed = p.failed; emit(); } });
+        return r;
+      } finally {
+        OFF.job = null;
+        await loadSaved(rid);
+        emit();
+      }
+    }
+    async function removeSaved(list) {
+      const rid = reciter().id;
+      if (!list) await OFF.store.remove(rid, null);
+      else {
+        const keep = new Set(); // keep the shared basmala if another saved surah needs it
+        SURAHS.forEach((m) => { if (!list.includes(m.n) && surahSaved(m.n)) surahNames(m.n).forEach((x) => keep.add(x)); });
+        await OFF.store.remove(rid, list.flatMap(surahNames).filter((x) => !keep.has(x)));
+      }
+      await loadSaved(rid); emit();
+    }
+    const fmtMB = (b) => b >= 1e9 ? `${(b / 1e9).toFixed(1)} GB` : `${Math.max(1, Math.round(b / 1e6))} MB`;
+    if (OFF.store) loadSaved();
+
     const P = { surah: 0, ayah: 0, playing: false, basmala: false, repeat: 'off', triedBackup: false, loading: false };
 
-    const urlFor = (s, a) => `https://everyayah.com/data/${reciter().id}/${pad(s)}${pad(a)}.mp3`;
+    const remoteUrl = (s, a, rid = reciter().id) => `https://everyayah.com/data/${rid}/${pad(s)}${pad(a)}.mp3`;
+    const urlFor = (s, a) => {
+      const rid = reciter().id, name = `${pad(s)}${pad(a)}.mp3`;
+      const saved = OFF.files[rid];
+      if (OFF.store && OFF.store.localUrl && saved && saved.has(name)) return OFF.store.localUrl(OFF.dir, rid, name);
+      return remoteUrl(s, a, rid);
+    };
     const backupUrl = (s, a) => reciter().cdn ? `https://cdn.islamic.network/quran/audio/128/${reciter().cdn}/${startOf[s] + a}.mp3` : null;
 
     function playAyah(s, a, { basmala } = {}) {
@@ -127,7 +189,7 @@
       const b = !P.basmala && !P.triedBackup && backupUrl(P.surah, P.ayah);
       if (b) { P.triedBackup = true; audio.src = b; audio.play().catch(() => {}); return; }
       P.playing = false; P.loading = false; updateBar();
-      toast(navigator.onLine === false ? 'You are offline. Recitation needs an internet connection.' : 'Could not load the recitation. Try another reciter.');
+      toast(navigator.onLine === false ? (OFF.store ? 'You are offline. Save this surah for offline (⬇ at the top) to listen without internet.' : 'You are offline. Recitation needs an internet connection.') : 'Could not load the recitation. Try another reciter.');
     });
     if ('mediaSession' in navigator) {
       try {
@@ -188,7 +250,7 @@
       return `<a class="item" href="#/surah/${s.n}">
         <span class="snum">${s.n}</span>
         <div class="body"><div class="t">${esc(s.tr)}</div><div class="muted small">${esc(s.en)} · ${s.ayahs} ayahs · ${s.type}</div></div>
-        <span class="sar">${esc(s.ar)}</span></a>`;
+        ${surahSaved(s.n) ? '<span class="saved" title="Saved for offline">⬇</span>' : ''}<span class="sar">${esc(s.ar)}</span></a>`;
     }
 
     views.quran = (params) => {
@@ -270,6 +332,7 @@
           <div class="muted small">${esc(meta.en)} · ${meta.ayahs} ayahs · ${meta.type}</div>
           <div class="actions" style="justify-content:center">
             <button class="btn primary" id="playAll">▶ Play surah</button>
+            ${OFF.store ? '<button class="btn" id="offBtn"></button>' : ''}
             <select class="btn" id="rec" aria-label="Reciter">${RECITERS.map((r) => `<option value="${r.id}" ${r.id === reciter().id ? 'selected' : ''}>${esc(r.name)}</option>`).join('')}</select>
           </div>
         </div>
@@ -294,9 +357,41 @@
         </div>
         <p class="muted small" style="margin-top:20px">${esc(IDX.credits)}</p>`;
 
+      // ⬇ save this surah for offline listening
+      const offBtn = document.getElementById('offBtn');
+      const drawOff = () => {
+        if (!offBtn) return;
+        const j = OFF.job;
+        if (j && j.rid === reciter().id && j.list.includes(n)) { offBtn.textContent = `⏳ Saving ${Math.round((j.done / j.total) * 100)}%`; offBtn.title = 'Tap to stop'; }
+        else if (surahSaved(n)) { offBtn.textContent = '✓ Offline'; offBtn.title = 'Saved on this device. Tap to remove'; }
+        else { offBtn.textContent = '⬇ Save offline'; offBtn.title = `Save ${reciter().name}'s recitation of this surah on this device`; }
+        offBtn.classList.toggle('on', surahSaved(n));
+      };
+      if (offBtn) {
+        OFF.listeners.add(drawOff);
+        ctx.setCleanup(() => OFF.listeners.delete(drawOff));
+        loadSaved().then(drawOff);
+        drawOff();
+        offBtn.onclick = async () => {
+          const j = OFF.job;
+          if (j && j.list.includes(n)) { OFF.store.cancel(); toast('Stopping the download'); return; }
+          if (surahSaved(n)) {
+            if (!confirm(`Remove the saved recitation of ${meta.tr}? You can save it again any time.`)) return;
+            await removeSaved([n]); toast('Removed from this device'); return;
+          }
+          try {
+            const r = await saveSurahs([n], meta.tr);
+            toast(r.failed ? `Saved, but ${r.failed} ayah${r.failed === 1 ? '' : 's'} could not be downloaded. Tap again to retry.` : r.cancelled ? 'Download stopped' : `${meta.tr} is saved. It now plays without internet.`);
+          } catch (e) {
+            toast(e.code === 'blocked' ? 'Saving recitation is not possible in the web version. Use the Android, iPhone or Windows app.' : (e.message || 'Could not save'));
+          }
+        };
+      }
+
       document.getElementById('rec').onchange = (e) => {
         settings.reciter = e.target.value; saveSettings();
         toast(`Reciter: ${reciter().name}`);
+        loadSaved().then(drawOff);
         if (P.surah) playAyah(P.surah, P.ayah);
       };
       document.getElementById('playAll').onclick = () => {
@@ -347,7 +442,17 @@
       highlight(false);
     };
 
-    return { RECITERS, lastRead, surahs: SURAHS, audioUrl: urlFor, backupUrl, reciterName: () => reciter().name, stopPlayer: () => { if (P.surah) stop(); } };
+    const offline = OFF.store ? {
+      kind: OFF.store.kind,
+      job: () => OFF.job,
+      onChange: (f) => { OFF.listeners.add(f); return () => OFF.listeners.delete(f); },
+      async summary() { await loadSaved(); return { count: savedCount(), bytes: OFF.bytes[reciter().id] || 0, kind: OFF.store.kind }; },
+      saveAll: () => saveSurahs(SURAHS.map((m) => m.n), 'the whole Quran'),
+      cancel: () => OFF.store.cancel(),
+      removeAll: () => removeSaved(null),
+      fmtMB,
+    } : null;
+    return { offline, RECITERS, lastRead, surahs: SURAHS, audioUrl: urlFor, backupUrl, reciterName: () => reciter().name, stopPlayer: () => { if (P.surah) stop(); } };
   }
 
   window.SakinaQuranUI = { install, RECITERS };
