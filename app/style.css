@@ -404,3 +404,9 @@ body.has-player #toast { bottom: calc(150px + var(--safe-bottom)); }
 .item .saved { font-size: 12px; color: var(--green-2, #2aa585); margin-right: 6px; }
 #offBtn.on { border-color: #6ee7b7; color: #d1fae5; background: rgba(42, 165, 133, .28); }
 #offField .actions .btn { padding: 8px 12px; }
+
+/* TV remote: show clearly where the focus is */
+body.tv a:focus, body.tv button:focus, body.tv select:focus, body.tv input:focus, body.tv [tabindex]:focus {
+  outline: 3px solid var(--gold, #e9c46a); outline-offset: 2px; box-shadow: 0 0 0 6px rgba(233, 196, 106, .25);
+}
+body.tv .nav a:focus { background: rgba(233, 196, 106, .18); }
